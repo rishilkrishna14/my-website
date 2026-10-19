@@ -1,0 +1,2671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduBattle - Multiplayer Learning Arena (Class 1-9)</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            },
+            accent: {
+              yellow: '#facc15',
+              coral: '#fb7185',
+              mint: '#34d399',
+              amber: '#f59e0b'
+            }
+          },
+          animation: {
+            'bounce-short': 'bounce 0.6s ease-in-out 2',
+            'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Three.js 3D WebGL Library for Cursor Follower -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- Socket.IO Client -->
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <!-- Canvas Confetti -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: radial-gradient(circle at 50% 10%, #17153b 0%, #090d16 100%);
+      min-height: 100vh;
+      color: #f8fafc;
+      overflow-x: hidden;
+    }
+    .glass-card {
+      background: rgba(18, 24, 43, 0.75);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .glass-card-glow {
+      box-shadow: 0 0 25px -5px rgba(99, 102, 241, 0.3);
+    }
+    .buzzer-btn {
+      background: radial-gradient(circle, #ef4444 0%, #b91c1c 100%);
+      box-shadow: 0 10px 0 #7f1d1d, 0 15px 25px rgba(239, 68, 68, 0.6);
+      transition: all 0.1s ease;
+    }
+    .buzzer-btn:active:not(:disabled) {
+      transform: translateY(6px);
+      box-shadow: 0 4px 0 #7f1d1d, 0 8px 15px rgba(239, 68, 68, 0.4);
+    }
+    .buzzer-btn:disabled {
+      background: #475569;
+      box-shadow: 0 6px 0 #1e293b;
+      cursor: not-allowed;
+      filter: grayscale(0.8);
+    }
+    .floating-emoji {
+      position: fixed;
+      pointer-events: none;
+      animation: floatUp 2.5s ease-out forwards;
+      font-size: 2.5rem;
+      z-index: 100;
+    }
+    @keyframes floatUp {
+      0% { transform: translateY(0) scale(0.6); opacity: 1; }
+      100% { transform: translateY(-300px) scale(1.4); opacity: 0; }
+    }
+  </style>
+</head>
+<body class="flex flex-col min-h-screen relative">
+
+  <!-- Interactive 3D Cursor-Following WebGL Canvas Background -->
+  <canvas id="threeCanvas" class="fixed inset-0 pointer-events-none z-0"></canvas>
+
+  <!-- Top Navigation Header -->
+  <header class="border-b border-slate-800/80 bg-slate-900/70 backdrop-blur-md sticky top-0 z-40">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-3 cursor-pointer" onclick="goHome()">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-amber-400 flex items-center justify-center text-2xl shadow-lg">
+          ⚡
+        </div>
+        <div>
+          <h1 class="text-xl font-black tracking-tight text-white flex items-center gap-1.5">
+            Edu<span class="text-indigo-400">Battle</span>
+            <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Class 1-9</span>
+          </h1>
+          <p class="text-xs text-slate-400">Multiplayer Syllabus Arena • CBSE & State Board</p>
+        </div>
+      </div>
+
+      <!-- Right controls: Audio, TN Books, Leaderboard & Player Chip -->
+      <div class="flex items-center space-x-2 sm:space-x-3">
+        <button onclick="openLeaderboardModal()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-500/10 border border-purple-500/30 text-purple-300 hover:bg-purple-500/20 text-xs font-bold transition">
+          <i data-lucide="trophy" class="w-4 h-4 text-purple-400"></i>
+          <span class="hidden sm:inline">Ranks & Board</span>
+          <span class="sm:hidden">Ranks</span>
+        </button>
+        <button onclick="openTextbooksModal()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:bg-amber-500/20 text-xs font-bold transition">
+          <i data-lucide="book-open" class="w-4 h-4 text-amber-400"></i>
+          <span class="hidden sm:inline">TN Books PDF (6, 7, 8)</span>
+          <span class="sm:hidden">PDFs</span>
+        </button>
+        <button id="soundToggleBtn" onclick="toggleAudio()" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition" title="Toggle Sound">
+          <i data-lucide="volume-2" class="w-5 h-5"></i>
+        </button>
+        <div id="topProfileBadge" class="flex items-center space-x-2 bg-slate-800/80 border border-slate-700/60 px-3 py-1.5 rounded-xl cursor-pointer" onclick="goHome()">
+          <span id="navAvatar" class="text-xl">🚀</span>
+          <span id="navName" class="font-bold text-sm text-slate-200">Astro</span>
+          <span id="navRankBadge" class="text-[10px] font-black px-2 py-0.5 rounded-lg bg-amber-700/20 text-amber-500 border border-amber-700/30 hidden sm:inline">🥉 Bronze 2</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Notification Toast Container -->
+  <div id="toastContainer" class="fixed top-20 right-4 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+  <!-- MAIN APP CONTAINER -->
+  <main class="flex-1 max-w-5xl w-full mx-auto p-4 md:p-6 flex flex-col justify-center">
+
+    <!-- ══════════════════════════════════════════════════════ -->
+    <!-- SCREEN 0: LOGIN SCREEN (shown first, no hidden class) -->
+    <!-- ══════════════════════════════════════════════════════ -->
+    <section id="loginScreen" class="w-full flex flex-col items-center justify-center min-h-[80vh] space-y-8 py-6">
+
+      <!-- Hero Banner -->
+      <div class="text-center space-y-4">
+        <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs font-semibold animate-pulse-fast">
+          🎮 Gamified School Learning for India
+        </div>
+        <h2 class="text-4xl md:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white via-indigo-100 to-indigo-400 leading-tight">
+          Turn Your Textbook<br>into an Online Battle
+        </h2>
+        <p class="text-slate-400 text-sm md:text-base max-w-lg mx-auto leading-relaxed">
+          Play with classmates or challenge random students across India in Speed Quizzes, Buzzer Battles, Fill-in-the-Blanks &amp; Match the Following!
+        </p>
+      </div>
+
+      <!-- Login / Profile Card -->
+      <div class="glass-card glass-card-glow p-7 rounded-3xl max-w-md w-full mx-auto shadow-2xl border border-slate-700/60 space-y-6">
+        <div class="text-center">
+          <h3 class="text-xl font-black text-white">Create Your Profile</h3>
+          <p class="text-xs text-slate-400 mt-1">Pick an avatar, enter your nickname and class to get started!</p>
+        </div>
+
+        <!-- Avatar Picker -->
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Choose Your Avatar</label>
+          <div class="grid grid-cols-6 gap-2" id="avatarGrid">
+            <!-- Avatars injected via JS -->
+          </div>
+        </div>
+
+        <!-- Nickname -->
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Student Nickname</label>
+          <input type="text" id="playerNameInput" value="Rishi Hero" maxlength="15"
+            class="w-full bg-slate-900/90 border border-slate-700 rounded-xl px-4 py-3 text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-base"
+            placeholder="Enter your nickname...">
+        </div>
+
+        <!-- Class & Board -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Class / Standard</label>
+            <select id="userGrade" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="1">Class 1</option>
+              <option value="2">Class 2</option>
+              <option value="3">Class 3</option>
+              <option value="4">Class 4</option>
+              <option value="5" selected>Class 5</option>
+              <option value="6">Class 6</option>
+              <option value="7">Class 7</option>
+              <option value="8">Class 8</option>
+              <option value="9">Class 9</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">Board</label>
+            <select id="userBoard" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-white font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500">
+              <option value="CBSE" selected>CBSE</option>
+              <option value="State Board">State Board</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- CTA Button -->
+        <button onclick="proceedToGameHub()" class="w-full bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-600 hover:from-indigo-500 hover:to-violet-500 text-white font-black py-4 rounded-2xl text-base uppercase tracking-wider shadow-2xl transition-all duration-200 flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-[0.98]">
+          <span class="text-2xl">🚀</span>
+          <span>Start Playing →</span>
+        </button>
+      </div>
+
+      <!-- Small footer tags -->
+      <div class="flex items-center gap-4 text-xs text-slate-500 flex-wrap justify-center">
+        <span>📚 Class 6, 7 &amp; 8 Syllabus</span>
+        <span>•</span>
+        <span>🏆 Live Leaderboards</span>
+        <span>•</span>
+        <span>🌐 Online Multiplayer (10 Players)</span>
+        <span>•</span>
+        <span>🧠 4 Game Modes</span>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════════════════════════════ -->
+    <!-- SCREEN 1: GAME MODE HUB (shown after login)           -->
+    <!-- ══════════════════════════════════════════════════════ -->
+    <section id="gameModeScreen" class="hidden w-full space-y-8 py-4">
+
+      <!-- Welcome Banner -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+        <div class="flex items-center gap-4">
+          <div id="hubAvatarBig" class="text-5xl">🚀</div>
+          <div>
+            <p class="text-slate-400 text-xs font-semibold uppercase tracking-wider">Welcome back,</p>
+            <h2 class="text-2xl md:text-3xl font-black text-white" id="hubWelcomeName">Player</h2>
+            <p class="text-xs text-indigo-300 font-bold mt-0.5" id="hubClassBoard">Class 5 · CBSE</p>
+          </div>
+        </div>
+        <button onclick="showScreen('loginScreen')" class="flex items-center gap-2 text-slate-400 hover:text-white text-sm font-semibold transition bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl">
+          <i data-lucide="log-out" class="w-4 h-4"></i> Switch Player
+        </button>
+      </div>
+
+      <!-- SECTION A: 4 DEDICATED GAME MODES -->
+      <div class="space-y-4">
+        <div class="flex items-center gap-2">
+          <h3 class="text-lg md:text-xl font-black text-white flex items-center gap-2">
+            🎮 <span>Pick Your Game Mode</span>
+          </h3>
+          <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">4 Modes</span>
+        </div>
+        <p class="text-xs text-slate-400 -mt-1">Each mode has its own gameplay style. Play solo to practice or host a room for friends!</p>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <!-- Mode 1: Speed Quiz -->
+          <div class="glass-card hover:border-indigo-400 p-5 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-4 group transition hover:shadow-xl hover:shadow-indigo-900/30">
+            <div class="space-y-2">
+              <div class="w-12 h-12 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-2xl group-hover:scale-110 transition">🎯</div>
+              <h4 class="font-extrabold text-base text-white group-hover:text-indigo-300 transition">Speed Quiz</h4>
+              <p class="text-xs text-slate-400 leading-relaxed">Classic 4-option MCQ with speed bonuses and streak multipliers.</p>
+            </div>
+            <div class="pt-2 border-t border-slate-800/80 space-y-2">
+              <button onclick="launchModeSeparately('quiz', 'solo')" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-3 rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition">
+                <i data-lucide="play" class="w-3.5 h-3.5"></i> Play Solo Quiz
+              </button>
+              <button onclick="launchModeSeparately('quiz', 'host')" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-1.5 px-3 rounded-xl text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition">
+                <i data-lucide="users" class="w-3.5 h-3.5"></i> Host Quiz Room
+              </button>
+            </div>
+          </div>
+
+          <!-- Mode 2: Buzzer Battle -->
+          <div class="glass-card hover:border-rose-400 p-5 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-4 group transition hover:shadow-xl hover:shadow-rose-900/30">
+            <div class="space-y-2">
+              <div class="w-12 h-12 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center text-2xl group-hover:scale-110 transition">🚨</div>
+              <h4 class="font-extrabold text-base text-white group-hover:text-rose-300 transition">Buzzer Battle</h4>
+              <p class="text-xs text-slate-400 leading-relaxed">Fastest-finger-first! Smash the buzzer before opponents to claim answering rights.</p>
+            </div>
+            <div class="pt-2 border-t border-slate-800/80 space-y-2">
+              <button onclick="launchModeSeparately('buzz', 'solo')" class="w-full bg-rose-600 hover:bg-rose-500 text-white font-bold py-2 px-3 rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition">
+                <i data-lucide="play" class="w-3.5 h-3.5"></i> Play Solo Buzzer
+              </button>
+              <button onclick="launchModeSeparately('buzz', 'host')" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-1.5 px-3 rounded-xl text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition">
+                <i data-lucide="users" class="w-3.5 h-3.5"></i> Host Buzzer Room
+              </button>
+            </div>
+          </div>
+
+          <!-- Mode 3: Fill in the Blanks -->
+          <div class="glass-card hover:border-emerald-400 p-5 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-4 group transition hover:shadow-xl hover:shadow-emerald-900/30">
+            <div class="space-y-2">
+              <div class="w-12 h-12 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-2xl group-hover:scale-110 transition">✍️</div>
+              <h4 class="font-extrabold text-base text-white group-hover:text-emerald-300 transition">Fill in the Blanks</h4>
+              <p class="text-xs text-slate-400 leading-relaxed">Recall scientific terms, math formulas, and historic figures by typing the missing keyword.</p>
+            </div>
+            <div class="pt-2 border-t border-slate-800/80 space-y-2">
+              <button onclick="launchModeSeparately('fill_in', 'solo')" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 px-3 rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition">
+                <i data-lucide="play" class="w-3.5 h-3.5"></i> Play Solo Fill In
+              </button>
+              <button onclick="launchModeSeparately('fill_in', 'host')" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-1.5 px-3 rounded-xl text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition">
+                <i data-lucide="users" class="w-3.5 h-3.5"></i> Host Fill In Room
+              </button>
+            </div>
+          </div>
+
+          <!-- Mode 4: Match the Following -->
+          <div class="glass-card hover:border-amber-400 p-5 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-4 group transition hover:shadow-xl hover:shadow-amber-900/30">
+            <div class="space-y-2">
+              <div class="w-12 h-12 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-2xl group-hover:scale-110 transition">🧩</div>
+              <h4 class="font-extrabold text-base text-white group-hover:text-amber-300 transition">Match the Following</h4>
+              <p class="text-xs text-slate-400 leading-relaxed">Connect terms in Column A with descriptions in Column B using interactive color linking.</p>
+            </div>
+            <div class="pt-2 border-t border-slate-800/80 space-y-2">
+              <button onclick="launchModeSeparately('match', 'solo')" class="w-full bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-2 px-3 rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition">
+                <i data-lucide="play" class="w-3.5 h-3.5"></i> Play Solo Match
+              </button>
+              <button onclick="launchModeSeparately('match', 'host')" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold py-1.5 px-3 rounded-xl text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 transition">
+                <i data-lucide="users" class="w-3.5 h-3.5"></i> Host Match Room
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION B: MULTIPLAYER & ROOM OPTIONS -->
+      <div class="space-y-4">
+        <h3 class="text-lg font-black text-white flex items-center gap-2">
+          🌐 <span>Multiplayer Rooms</span>
+          <span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">Online</span>
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <!-- Create Private Room -->
+          <div onclick="openHostSettings()" class="glass-card hover:bg-slate-800/80 p-6 rounded-2xl border border-indigo-500/30 hover:border-indigo-400 transition cursor-pointer group flex flex-col justify-between hover:shadow-xl hover:shadow-indigo-900/30">
+            <div class="space-y-3">
+              <div class="w-12 h-12 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-2xl group-hover:scale-110 transition">👑</div>
+              <h3 class="text-xl font-bold text-white group-hover:text-indigo-300 transition">Create Private Room</h3>
+              <p class="text-xs text-slate-400 leading-relaxed">Host a match with your friends. Choose the chapter, timer, rounds, and game rules!</p>
+            </div>
+            <div class="mt-4 pt-3 border-t border-slate-700/60 flex items-center justify-between text-indigo-400 font-bold text-xs uppercase tracking-wider">
+              <span>Set Up Room</span>
+              <i data-lucide="arrow-right" class="w-4 h-4"></i>
+            </div>
+          </div>
+
+          <!-- Join with Code -->
+          <div onclick="showScreen('joinRoomScreen')" class="glass-card hover:bg-slate-800/80 p-6 rounded-2xl border border-slate-700 hover:border-amber-400 transition cursor-pointer group flex flex-col justify-between hover:shadow-xl hover:shadow-amber-900/30">
+            <div class="space-y-3">
+              <div class="w-12 h-12 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-2xl group-hover:scale-110 transition">🔑</div>
+              <h3 class="text-xl font-bold text-white group-hover:text-amber-300 transition">Join Friend's Room</h3>
+              <p class="text-xs text-slate-400 leading-relaxed">Enter the 5-digit room code your friend shared to jump straight into their battle lobby.</p>
+            </div>
+            <div class="mt-4 pt-3 border-t border-slate-700/60 flex items-center justify-between text-amber-400 font-bold text-xs uppercase tracking-wider">
+              <span>Enter Code</span>
+              <i data-lucide="arrow-right" class="w-4 h-4"></i>
+            </div>
+          </div>
+
+          <!-- Instant Modes Card -->
+          <div class="glass-card p-6 rounded-2xl border border-slate-700 flex flex-col justify-between space-y-4">
+            <div class="space-y-3">
+              <div class="flex items-center gap-2">
+                <span class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg">⚡</span>
+                <h3 class="text-lg font-bold text-white">Instant Modes</h3>
+              </div>
+              <p class="text-xs text-slate-400">Jump right into action with 0 wait time.</p>
+            </div>
+            <div class="space-y-2">
+              <button onclick="startMegaArena()" class="w-full bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-black py-3 px-4 rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-xl transition animate-pulse-fast">
+                <i data-lucide="globe" class="w-4 h-4 text-purple-200"></i>
+                <span>🌐 10-Player Mega Arena</span>
+              </button>
+              <button onclick="startRandomMultiplayer()" class="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold py-2 px-4 rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg transition">
+                <i data-lucide="users" class="w-4 h-4"></i>
+                <span>Random 1v1 Match</span>
+              </button>
+              <button onclick="openSoloHub()" class="w-full bg-slate-800 hover:bg-indigo-600 text-slate-200 hover:text-white font-bold py-2 px-4 rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition shadow-md">
+                <i data-lucide="book-open" class="w-4 h-4 text-indigo-400"></i>
+                <span>Solo Learn &amp; Practice</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SCREEN 1.5: SOLO LEARN & PRACTICE HUB (TOPIC SELECTOR + STUDY NOTES BEFORE PLAY) -->
+    <section id="soloHubScreen" class="hidden max-w-3xl mx-auto w-full space-y-6">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+        <button onclick="showScreen('homeScreen')" class="flex items-center gap-2 text-slate-400 hover:text-white text-sm font-semibold transition">
+          <i data-lucide="chevron-left" class="w-5 h-5"></i> Back to Main
+        </button>
+        <span class="text-xs font-bold tracking-wider uppercase px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
+          <i data-lucide="book-open" class="w-3.5 h-3.5"></i> Learn Before Battle
+        </span>
+      </div>
+
+      <!-- Topic & Difficulty Chooser Card -->
+      <div class="glass-card p-6 rounded-2xl border border-slate-700/80 space-y-5 shadow-xl">
+        <div>
+          <h2 class="text-2xl font-black text-white">Select Topic & Difficulty</h2>
+          <p class="text-xs text-slate-400 mt-1">Study key concepts from Class 6, 7, or 8 before playing. You can change difficulty before and during the match.</p>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+          <div>
+            <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Board</label>
+            <select id="soloBoard" onchange="syncSoloDropdowns()" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-white focus:ring-2 focus:ring-emerald-500">
+              <option value="State Board" selected>State Board (TN Samacheer)</option>
+              <option value="CBSE">CBSE Board</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Class / Standard</label>
+            <select id="soloGrade" onchange="syncSoloDropdowns()" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-white focus:ring-2 focus:ring-emerald-500">
+              <option value="6" selected>Class 6</option>
+              <option value="7">Class 7</option>
+              <option value="8">Class 8</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Subject</label>
+            <select id="soloSubject" onchange="syncSoloChapters()" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-white focus:ring-2 focus:ring-emerald-500">
+              <option value="Science" selected>Science</option>
+              <option value="Mathematics">Mathematics</option>
+              <option value="Social Science">Social Science</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Single Chapter / Topic</label>
+            <select id="soloChapter" onchange="syncSoloSubtopics()" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs font-bold text-white focus:ring-2 focus:ring-emerald-500"></select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-amber-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+              <i data-lucide="list-tree" class="w-3.5 h-3.5"></i> Subtopic
+            </label>
+            <select id="soloSubtopic" onchange="loadStudyNotesForTopic()" class="w-full bg-slate-950 border border-amber-500/50 rounded-lg p-2.5 text-xs font-bold text-amber-300 focus:ring-2 focus:ring-amber-500"></select>
+          </div>
+        </div>
+
+        <!-- Game Mode Selection (Quiz, Buzzer, Fill In, Match Following, Mixed) -->
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Choose Game Mode (Play Separately)</label>
+          <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            <button type="button" onclick="selectSoloGameType('quiz')" id="soloType_quiz" class="p-2.5 rounded-xl border border-indigo-400 bg-indigo-500/30 text-center transition">
+              <span class="block text-lg">🎯</span>
+              <span class="text-xs font-bold text-white block mt-0.5">Speed Quiz</span>
+            </button>
+            <button type="button" onclick="selectSoloGameType('buzz')" id="soloType_buzz" class="p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-center transition hover:bg-slate-700">
+              <span class="block text-lg">🚨</span>
+              <span class="text-xs font-bold text-white block mt-0.5">Buzzer Battle</span>
+            </button>
+            <button type="button" onclick="selectSoloGameType('fill_in')" id="soloType_fill_in" class="p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-center transition hover:bg-slate-700">
+              <span class="block text-lg">✍️</span>
+              <span class="text-xs font-bold text-white block mt-0.5">Fill In</span>
+            </button>
+            <button type="button" onclick="selectSoloGameType('match')" id="soloType_match" class="p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-center transition hover:bg-slate-700">
+              <span class="block text-lg">🧩</span>
+              <span class="text-xs font-bold text-white block mt-0.5">Match Following</span>
+            </button>
+            <button type="button" onclick="selectSoloGameType('all')" id="soloType_all" class="p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-center transition hover:bg-slate-700 col-span-2 sm:col-span-1">
+              <span class="block text-lg">🎲</span>
+              <span class="text-xs font-bold text-white block mt-0.5">Mixed</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Pre-Game Difficulty Selector -->
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Choose Initial Difficulty (Before Start)</label>
+          <div class="grid grid-cols-3 gap-3">
+            <button type="button" onclick="selectSoloDifficulty('easy')" id="soloDiff_easy" class="p-3 rounded-xl border border-slate-700 bg-slate-800 text-center transition hover:bg-slate-700">
+              <span class="block text-base">🟢</span>
+              <span class="text-xs font-bold text-white block mt-0.5">Easy</span>
+              <span class="text-[10px] text-slate-400 block">+500 pts</span>
+            </button>
+            <button type="button" onclick="selectSoloDifficulty('medium')" id="soloDiff_medium" class="p-3 rounded-xl border border-amber-400 bg-amber-500/20 text-center transition">
+              <span class="block text-base">🟡</span>
+              <span class="text-xs font-bold text-amber-300 block mt-0.5">Medium</span>
+              <span class="text-[10px] text-amber-200/80 block">+1000 pts</span>
+            </button>
+            <button type="button" onclick="selectSoloDifficulty('hard')" id="soloDiff_hard" class="p-3 rounded-xl border border-slate-700 bg-slate-800 text-center transition hover:bg-slate-700">
+              <span class="block text-base">🔴</span>
+              <span class="text-xs font-bold text-white block mt-0.5">Hard</span>
+              <span class="text-[10px] text-slate-400 block">+1500 pts</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- STATE BOARD TEXTBOOK TOPIC PDF READER CARD -->
+      <div id="textbookPdfCard" class="glass-card p-6 md:p-8 rounded-2xl border border-amber-500/40 space-y-6 shadow-2xl">
+        <!-- Header with State Board Badge & Actions -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-800 gap-3">
+          <div class="space-y-1">
+            <div class="flex items-center gap-2">
+              <span class="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-black uppercase tracking-wider border border-amber-500/30 flex items-center gap-1">
+                <i data-lucide="book" class="w-3 h-3"></i> State Board English Medium Textbook
+              </span>
+              <span id="topicTermBadge" class="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded font-bold">Term 1</span>
+            </div>
+            <h3 id="topicPdfBookTitle" class="text-xl md:text-2xl font-black text-white">Loading Textbook Chapter...</h3>
+            <p id="topicPdfUnitTitle" class="text-xs text-amber-400 font-bold">---</p>
+          </div>
+
+          <!-- Quick Actions: Open PDF & Download -->
+          <div class="flex items-center gap-2">
+            <a id="openTopicPdfBtn" href="#" target="_blank" class="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-lg transition">
+              <i data-lucide="file-text" class="w-4 h-4"></i>
+              <span>Open Chapter PDF</span>
+            </a>
+            <a id="openGovPortalBtn" href="https://textbooksonline.tn.nic.in/" target="_blank" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition" title="Official Government Portal">
+              <i data-lucide="external-link" class="w-4 h-4"></i>
+            </a>
+          </div>
+        </div>
+
+        <!-- EMBEDDED TEXTBOOK READING VIEWER -->
+        <div class="bg-slate-950/90 rounded-2xl border border-slate-700/80 overflow-hidden shadow-inner">
+          <div class="bg-slate-900 px-4 py-2.5 border-b border-slate-800 flex items-center justify-between text-xs text-slate-400">
+            <div class="flex items-center gap-2">
+              <span class="w-3 h-3 rounded-full bg-rose-500"></span>
+              <span class="w-3 h-3 rounded-full bg-amber-500"></span>
+              <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+              <span class="font-bold text-slate-300 ml-2" id="pdfReaderHeader">Textbook Chapter Reader</span>
+            </div>
+            <span class="text-[11px] text-amber-400 font-mono" id="pdfPageIndicator">Pages 1 to 26</span>
+          </div>
+
+          <!-- Textbook Sections Content Container -->
+          <div id="textbookSectionsContainer" class="p-5 md:p-6 space-y-4 max-h-[420px] overflow-y-auto text-slate-200 text-sm leading-relaxed">
+            <!-- Injected via JS -->
+          </div>
+        </div>
+
+        <!-- Start Practice Button -->
+        <div class="pt-2">
+          <button onclick="launchSoloPracticeGame()" class="w-full bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-400 text-white font-extrabold py-4 rounded-xl text-sm uppercase tracking-wider shadow-xl transition flex items-center justify-center gap-2 animate-bounce-short">
+            <i data-lucide="play" class="w-5 h-5"></i>
+            <span>I've Read the Chapter! Start Practice Battle</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- SCREEN 2: HOST ROOM CONFIGURATION SCREEN -->
+    <section id="hostConfigScreen" class="hidden max-w-2xl mx-auto w-full space-y-5">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+        <button onclick="showScreen('homeScreen')" class="flex items-center gap-2 text-slate-400 hover:text-white text-sm font-semibold transition">
+          <i data-lucide="chevron-left" class="w-5 h-5"></i> Back
+        </button>
+        <span class="text-xs font-bold tracking-wider uppercase px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+          👑 Host Settings Panel
+        </span>
+      </div>
+
+      <div class="glass-card p-6 md:p-8 rounded-2xl space-y-6 shadow-2xl border border-slate-700/80">
+        <div>
+          <h2 class="text-2xl font-black text-white">Custom Game Room Setup</h2>
+          <p class="text-xs text-slate-400 mt-1">Configure syllabus, game mechanics, and rules for your room.</p>
+        </div>
+
+        <!-- 1. Curriculum / Syllabus Selection -->
+        <div class="space-y-3 bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+          <h4 class="text-xs font-bold uppercase tracking-wider text-indigo-400 flex items-center gap-1.5">
+            <i data-lucide="graduation-cap" class="w-4 h-4"></i> Syllabus & Chapter
+          </h4>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Education Board</label>
+              <select id="hostBoardSelect" onchange="syncCurriculumDropdowns()" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:ring-2 focus:ring-indigo-500">
+                <option value="CBSE">CBSE Board</option>
+                <option value="State Board">State Board</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Standard / Class</label>
+              <select id="hostGradeSelect" onchange="syncCurriculumDropdowns()" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:ring-2 focus:ring-indigo-500">
+                <option value="1">Class 1</option>
+                <option value="2">Class 2</option>
+                <option value="3">Class 3</option>
+                <option value="4">Class 4</option>
+                <option value="5" selected>Class 5</option>
+                <option value="6">Class 6</option>
+                <option value="7">Class 7</option>
+                <option value="8">Class 8</option>
+                <option value="9">Class 9</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Subject</label>
+              <select id="hostSubjectSelect" onchange="syncChaptersDropdown()" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:ring-2 focus:ring-indigo-500"></select>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-400 mb-1">Chapter</label>
+              <select id="hostChapterSelect" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-sm text-white focus:ring-2 focus:ring-indigo-500"></select>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Game Mode & Type -->
+        <div class="space-y-3 bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+          <h4 class="text-xs font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+            <i data-lucide="gamepad-2" class="w-4 h-4"></i> Game Mechanics
+          </h4>
+          <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+            <button type="button" onclick="selectGameType('quiz')" id="gameType_quiz" class="game-type-chip p-3 rounded-xl border border-slate-700 bg-slate-800 text-center hover:bg-slate-700 transition">
+              <span class="block text-lg">🎯</span>
+              <span class="text-xs font-bold text-white block mt-1">Speed Quiz</span>
+            </button>
+            <button type="button" onclick="selectGameType('buzz')" id="gameType_buzz" class="game-type-chip p-3 rounded-xl border border-slate-700 bg-slate-800 text-center hover:bg-slate-700 transition">
+              <span class="block text-lg">🚨</span>
+              <span class="text-xs font-bold text-white block mt-1">Buzzer Battle</span>
+            </button>
+            <button type="button" onclick="selectGameType('fill_in')" id="gameType_fill_in" class="game-type-chip p-3 rounded-xl border border-slate-700 bg-slate-800 text-center hover:bg-slate-700 transition">
+              <span class="block text-lg">✍️</span>
+              <span class="text-xs font-bold text-white block mt-1">Fill In</span>
+            </button>
+            <button type="button" onclick="selectGameType('match')" id="gameType_match" class="game-type-chip p-3 rounded-xl border border-slate-700 bg-slate-800 text-center hover:bg-slate-700 transition">
+              <span class="block text-lg">🧩</span>
+              <span class="text-xs font-bold text-white block mt-1">Match Following</span>
+            </button>
+            <button type="button" onclick="selectGameType('all')" id="gameType_all" class="game-type-chip p-3 rounded-xl border border-indigo-400 bg-indigo-500/30 text-center hover:bg-slate-700 transition col-span-2 sm:col-span-1">
+              <span class="block text-lg">🎲</span>
+              <span class="text-xs font-bold text-white block mt-1">Mixed Mode</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 3. Difficulty, Rounds & Timer -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Difficulty</label>
+            <select id="hostDifficulty" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm text-white">
+              <option value="all">Mixed (All levels)</option>
+              <option value="easy">Easy 🟢</option>
+              <option value="medium" selected>Medium 🟡</option>
+              <option value="hard">Hard 🔴</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Number of Rounds</label>
+            <select id="hostRounds" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm text-white">
+              <option value="3">3 Questions</option>
+              <option value="5" selected>5 Questions</option>
+              <option value="8">8 Questions</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Timer per Question</label>
+            <select id="hostTimer" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-sm text-white">
+              <option value="10">10 Seconds (Fast)</option>
+              <option value="15" selected>15 Seconds (Normal)</option>
+              <option value="25">25 Seconds (Relaxed)</option>
+            </select>
+          </div>
+        </div>
+
+        <button onclick="submitCreateRoom()" class="w-full bg-gradient-to-r from-indigo-500 via-purple-600 to-indigo-600 hover:from-indigo-400 hover:to-indigo-500 text-white font-extrabold py-3.5 rounded-xl shadow-lg transition text-sm uppercase tracking-wider flex items-center justify-center gap-2">
+          <i data-lucide="sparkles" class="w-5 h-5"></i>
+          <span>Create Room & Get Room Code</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- SCREEN 3: JOIN ROOM VIA CODE SCREEN -->
+    <section id="joinRoomScreen" class="hidden max-w-md mx-auto w-full space-y-5">
+      <div class="pb-2 border-b border-slate-800">
+        <button onclick="showScreen('homeScreen')" class="flex items-center gap-2 text-slate-400 hover:text-white text-sm font-semibold transition">
+          <i data-lucide="chevron-left" class="w-5 h-5"></i> Back
+        </button>
+      </div>
+
+      <div class="glass-card p-6 md:p-8 rounded-2xl space-y-6 shadow-2xl border border-slate-700/80 text-center">
+        <div class="w-16 h-16 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-3xl mx-auto shadow-inner">
+          🔑
+        </div>
+        <div>
+          <h2 class="text-2xl font-black text-white">Enter Room Code</h2>
+          <p class="text-xs text-slate-400 mt-1">Ask your friend or teacher for their 5-digit room code.</p>
+        </div>
+
+        <div class="space-y-4">
+          <input type="text" id="joinRoomCodeInput" placeholder="ABC12" maxlength="5"
+            class="w-full uppercase text-center tracking-[0.4em] text-3xl font-black bg-slate-950 border-2 border-amber-500/50 rounded-xl py-3 text-amber-300 focus:outline-none focus:ring-4 focus:ring-amber-500/20 focus:border-amber-400">
+
+          <button onclick="submitJoinRoom()" class="w-full bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 text-slate-950 font-black py-3 rounded-xl shadow-lg transition text-sm uppercase tracking-wider flex items-center justify-center gap-2">
+            <span>Join Battle Arena</span>
+            <i data-lucide="arrow-right" class="w-5 h-5"></i>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- SCREEN 4: WAITING LOBBY (HOST & PLAYERS) -->
+    <section id="lobbyScreen" class="hidden max-w-3xl mx-auto w-full space-y-6">
+      <!-- Header Room Code Banner -->
+      <div class="glass-card p-5 rounded-2xl border border-indigo-500/40 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div>
+          <span class="text-xs uppercase font-bold text-indigo-400 tracking-wider">Multiplayer Room</span>
+          <div class="flex items-center gap-3 mt-1">
+            <span id="lobbyRoomCode" class="text-3xl md:text-4xl font-black tracking-widest text-white font-mono bg-slate-900/90 px-4 py-1 rounded-xl border border-slate-700">----</span>
+            <button onclick="copyRoomCode()" class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition" title="Copy Code">
+              <i data-lucide="copy" class="w-5 h-5"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Room Settings Summary Pills -->
+        <div id="lobbySettingsPills" class="flex flex-wrap gap-2 text-xs font-semibold">
+          <!-- Injected via JS -->
+        </div>
+      </div>
+
+      <!-- Player Roster Grid -->
+      <div class="glass-card p-6 rounded-2xl border border-slate-800 space-y-4">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-bold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+            <i data-lucide="users" class="w-4 h-4 text-indigo-400"></i>
+            <span>Connected Students (<span id="playerCount">0</span>)</span>
+          </h3>
+          <span class="flex items-center gap-1.5 text-xs text-emerald-400 font-semibold">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span> Live Room
+          </span>
+        </div>
+
+        <div id="lobbyPlayerGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          <!-- Player Cards injected here -->
+        </div>
+      </div>
+
+      <!-- Host Control Actions -->
+      <div class="flex flex-col sm:flex-row gap-3">
+        <button id="hostStartGameBtn" onclick="requestStartGame()" class="hidden flex-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-400 text-white font-black py-4 rounded-xl shadow-xl transition text-sm uppercase tracking-wider items-center justify-center gap-2 animate-pulse-fast">
+          <i data-lucide="play" class="w-5 h-5"></i>
+          <span>Start Battle Now!</span>
+        </button>
+
+        <div id="nonHostWaitingNotice" class="hidden flex-1 glass-card p-4 rounded-xl border border-amber-500/30 text-amber-300 text-xs text-center font-semibold flex items-center justify-center gap-2">
+          <i data-lucide="clock" class="w-4 h-4 animate-spin"></i>
+          <span>Waiting for Room Host to launch the game...</span>
+        </div>
+
+        <button onclick="leaveCurrentRoom()" class="px-5 py-3 rounded-xl bg-slate-800/80 hover:bg-rose-950/60 hover:text-rose-300 text-slate-400 text-xs font-bold uppercase tracking-wider transition">
+          Leave
+        </button>
+      </div>
+
+      <!-- Quick Chat & Emojis Bar -->
+      <div class="flex items-center gap-2 pt-2 justify-center">
+        <span class="text-xs text-slate-400 font-bold mr-1">Cheer:</span>
+        <button onclick="sendEmoji('🔥')" class="text-2xl hover:scale-125 transition">🔥</button>
+        <button onclick="sendEmoji('👏')" class="text-2xl hover:scale-125 transition">👏</button>
+        <button onclick="sendEmoji('🧠')" class="text-2xl hover:scale-125 transition">🧠</button>
+        <button onclick="sendEmoji('⚡')" class="text-2xl hover:scale-125 transition">⚡</button>
+        <button onclick="sendEmoji('🥳')" class="text-2xl hover:scale-125 transition">🥳</button>
+      </div>
+    </section>
+
+    <!-- SCREEN 5: ACTIVE GAMEPLAY (QUIZ, FILL IN, BUZZER) -->
+    <section id="gameScreen" class="hidden max-w-3xl mx-auto w-full space-y-5">
+      <!-- Round Info, In-Between Difficulty Switcher & Timer Bar -->
+      <div class="glass-card p-4 rounded-2xl border border-slate-800 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2">
+          <span id="gameRoundBadge" class="px-3 py-1 rounded-xl bg-indigo-500/20 text-indigo-300 text-xs font-black uppercase tracking-wider border border-indigo-500/30">
+            Round 1 / 5
+          </span>
+          <span id="gameSubjectBadge" class="text-xs font-semibold text-slate-300">
+            Science • Chapter
+          </span>
+        </div>
+
+        <!-- In-Between Difficulty Switcher (Switch anytime during game!) -->
+        <div class="flex items-center bg-slate-900/90 border border-slate-700/80 rounded-xl p-1 text-xs">
+          <span class="text-[10px] uppercase font-bold text-slate-400 px-2 hidden sm:inline">Difficulty:</span>
+          <button type="button" onclick="changeInGameDifficulty('easy')" id="diffBtn_easy" class="px-2.5 py-1 rounded-lg font-bold text-slate-400 hover:text-white transition">🟢 Easy</button>
+          <button type="button" onclick="changeInGameDifficulty('medium')" id="diffBtn_medium" class="px-2.5 py-1 rounded-lg font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 transition">🟡 Med</button>
+          <button type="button" onclick="changeInGameDifficulty('hard')" id="diffBtn_hard" class="px-2.5 py-1 rounded-lg font-bold text-slate-400 hover:text-white transition">🔴 Hard</button>
+        </div>
+
+        <!-- Timer Circle/Countdown -->
+        <div class="flex items-center gap-2">
+          <i data-lucide="timer" class="w-4 h-4 text-amber-400"></i>
+          <span id="gameTimerNum" class="text-2xl font-black text-amber-400 font-mono">15</span>
+        </div>
+      </div>
+
+      <!-- Timer Progress Bar -->
+      <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+        <div id="gameTimerBar" class="bg-gradient-to-r from-amber-400 to-rose-500 h-full transition-all duration-200" style="width: 100%"></div>
+      </div>
+
+      <!-- QUESTION CARD -->
+      <div class="glass-card p-6 md:p-8 rounded-2xl border border-slate-700/80 shadow-2xl space-y-4">
+        <div class="flex items-center justify-between text-xs text-slate-400">
+          <span id="questionTypeIndicator" class="uppercase font-bold tracking-wider text-indigo-400">Multiple Choice Quiz</span>
+          <span id="questionDiffIndicator" class="px-2 py-0.5 rounded bg-slate-800 text-slate-300">Medium</span>
+        </div>
+
+        <h3 id="questionText" class="text-xl md:text-2xl font-extrabold text-white leading-relaxed">
+          Loading Question...
+        </h3>
+
+        <!-- BUZZER NOTICE BAR (Appears when someone buzzes) -->
+        <div id="buzzerLockBanner" class="hidden p-3 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs font-bold flex items-center justify-between animate-pulse">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">🚨</span>
+            <span id="buzzerLockText">Player Buzzed First!</span>
+          </div>
+          <span id="buzzerCountdown" class="text-base font-black font-mono">5s</span>
+        </div>
+      </div>
+
+      <!-- INTERACTIVE GAMEPLAY INPUT AREA -->
+      <div id="gameplayArea" class="w-full">
+        <!-- 1. QUIZ OPTIONS (4 Buttons) -->
+        <div id="quizOptionsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <!-- Injected via JS -->
+        </div>
+
+        <!-- 2. FILL IN THE BLANKS INPUT -->
+        <div id="fillInContainer" class="hidden glass-card p-6 rounded-2xl border border-slate-800 space-y-3 text-center">
+          <p class="text-xs text-slate-400 font-bold uppercase tracking-wider">Type the missing word</p>
+          <div class="flex gap-2 max-w-md mx-auto">
+            <input type="text" id="fillInInput" placeholder="Your answer..." autocomplete="off"
+              class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white text-lg font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <button onclick="submitFillInAnswer()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-3 rounded-xl transition">
+              Submit
+            </button>
+          </div>
+        </div>
+
+        <!-- 3. BUZZER BUTTON (FAST FINGER FIRST) -->
+        <div id="buzzerContainer" class="hidden flex flex-col items-center justify-center py-6 space-y-4">
+          <button id="smashBuzzerBtn" onclick="pressBuzzer()" class="buzzer-btn w-44 h-44 rounded-full flex flex-col items-center justify-center text-white font-black text-xl uppercase tracking-wider select-none shadow-2xl">
+            <span class="text-4xl mb-1">🚨</span>
+            <span>BUZZ!</span>
+          </button>
+          <p class="text-xs text-slate-400 font-semibold">Smash the buzzer to claim answering rights!</p>
+        </div>
+
+        <!-- 4. MATCH THE FOLLOWING INTERACTIVE CONTAINER -->
+        <div id="matchContainer" class="hidden glass-card p-5 md:p-6 rounded-2xl border border-amber-500/30 space-y-4">
+          <div class="flex items-center justify-between text-xs pb-2 border-b border-slate-800">
+            <span class="font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
+              <i data-lucide="layers" class="w-4 h-4 text-amber-400"></i> Match Pairs: Click an item in Column A, then its match in Column B
+            </span>
+            <button type="button" onclick="resetMatchPairs()" class="text-slate-400 hover:text-rose-400 text-xs font-semibold underline">
+              Reset Pairs
+            </button>
+          </div>
+
+          <!-- Two Columns Grid -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Left Column: Column A -->
+            <div class="space-y-2.5">
+              <span class="block text-xs font-black text-slate-400 uppercase tracking-wider">Column A (Key Terms)</span>
+              <div id="matchColA" class="space-y-2"></div>
+            </div>
+            <!-- Right Column: Column B -->
+            <div class="space-y-2.5">
+              <span class="block text-xs font-black text-slate-400 uppercase tracking-wider">Column B (Definitions & Properties)</span>
+              <div id="matchColB" class="space-y-2"></div>
+            </div>
+          </div>
+
+          <!-- Submit Matches Action Bar -->
+          <div class="pt-3 border-t border-slate-800 flex items-center justify-between">
+            <span id="matchStatusText" class="text-xs font-bold text-amber-400">
+              Matched: 0 pairs
+            </span>
+            <button id="submitMatchBtn" type="button" onclick="submitMatchAnswer()" disabled
+              class="bg-gradient-to-r from-amber-500 to-yellow-600 hover:from-amber-400 hover:to-yellow-500 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-black py-2.5 px-6 rounded-xl text-xs uppercase tracking-wider shadow-lg transition flex items-center gap-2">
+              <i data-lucide="check-circle" class="w-4 h-4"></i>
+              <span>Confirm & Lock Matches</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Feedback Banner after answering -->
+      <div id="feedbackBanner" class="hidden glass-card p-4 rounded-xl border flex items-center justify-between animate-bounce-short">
+        <div class="flex items-center gap-3">
+          <span id="feedbackIcon" class="text-2xl">🎉</span>
+          <div>
+            <h4 id="feedbackTitle" class="font-bold text-sm">Correct Answer!</h4>
+            <p id="feedbackExplanation" class="text-xs text-slate-400 max-w-lg mt-0.5"></p>
+          </div>
+        </div>
+        <div class="text-right">
+          <span id="feedbackPoints" class="text-lg font-black text-amber-400">+1000 pts</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- SCREEN 6: ROUND SUMMARY & LIVE LEADERBOARD -->
+    <section id="roundRevealScreen" class="hidden max-w-2xl mx-auto w-full space-y-5">
+      <div class="text-center space-y-1">
+        <span class="text-xs font-bold uppercase tracking-wider text-indigo-400">Round Review</span>
+        <h2 class="text-2xl font-black text-white">Scores & Standings</h2>
+      </div>
+
+      <!-- Correct Answer Card -->
+      <div class="glass-card p-5 rounded-2xl border border-indigo-500/30 space-y-2">
+        <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Correct Answer</span>
+        <div id="revealCorrectAns" class="text-lg font-black text-emerald-400">---</div>
+        <p id="revealExplanation" class="text-xs text-slate-300 leading-relaxed"></p>
+      </div>
+
+      <!-- Live Leaderboard Table -->
+      <div class="glass-card p-5 rounded-2xl border border-slate-800 space-y-3">
+        <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400">Current Standings</h4>
+        <div id="roundLeaderboardList" class="space-y-2">
+          <!-- Injected via JS -->
+        </div>
+      </div>
+
+      <!-- Host Next Round Button or Waiting -->
+      <div class="pt-2">
+        <button id="hostNextRoundBtn" onclick="requestNextRound()" class="hidden w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white font-black py-3.5 rounded-xl text-sm uppercase tracking-wider shadow-lg transition flex items-center justify-center gap-2">
+          <span>Proceed to Next Round</span>
+          <i data-lucide="arrow-right" class="w-4 h-4"></i>
+        </button>
+
+        <div id="nonHostRoundWaiting" class="hidden glass-card p-3 rounded-xl border border-slate-800 text-xs text-slate-400 text-center flex items-center justify-center gap-2">
+          <i data-lucide="loader" class="w-4 h-4 animate-spin text-indigo-400"></i>
+          <span>Waiting for host to continue...</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- SCREEN 7: FINAL PODIUM & VICTORY -->
+    <section id="podiumScreen" class="hidden max-w-2xl mx-auto w-full space-y-6 text-center">
+      <div class="space-y-2">
+        <div class="inline-block text-5xl animate-bounce">🏆</div>
+        <h2 class="text-3xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-500">
+          Battle Completed!
+        </h2>
+        <p class="text-xs text-slate-400">Honoring the Top Scorers of the Class</p>
+      </div>
+
+      <!-- 3-Player Visual Podium -->
+      <div id="podiumContainer" class="flex items-end justify-center gap-3 pt-6 pb-2 min-h-[220px]">
+        <!-- 2nd Place -->
+        <div id="podium2nd" class="flex-1 flex flex-col items-center">
+          <span class="text-3xl mb-1" id="podium2Avatar">🦁</span>
+          <span class="font-bold text-xs text-slate-200 truncate w-24" id="podium2Name">Player 2</span>
+          <span class="text-[10px] text-amber-300 font-bold mb-2" id="podium2Score">0 pts</span>
+          <div class="w-full bg-gradient-to-t from-slate-800 to-slate-700 h-28 rounded-t-xl flex items-center justify-center text-xl font-black text-slate-300 border-t-2 border-slate-400">
+            2nd 🥈
+          </div>
+        </div>
+
+        <!-- 1st Place (Winner) -->
+        <div id="podium1st" class="flex-1 flex flex-col items-center">
+          <span class="text-2xl mb-1">👑</span>
+          <span class="text-4xl mb-1" id="podium1Avatar">🚀</span>
+          <span class="font-extrabold text-sm text-yellow-300 truncate w-28" id="podium1Name">Winner</span>
+          <span class="text-xs text-yellow-400 font-black mb-2" id="podium1Score">0 pts</span>
+          <div class="w-full bg-gradient-to-t from-amber-600 to-yellow-500 h-40 rounded-t-xl flex items-center justify-center text-2xl font-black text-slate-950 border-t-4 border-yellow-300 shadow-2xl">
+            1st 🥇
+          </div>
+        </div>
+
+        <!-- 3rd Place -->
+        <div id="podium3rd" class="flex-1 flex flex-col items-center">
+          <span class="text-3xl mb-1" id="podium3Avatar">🦉</span>
+          <span class="font-bold text-xs text-slate-200 truncate w-24" id="podium3Name">Player 3</span>
+          <span class="text-[10px] text-amber-300 font-bold mb-2" id="podium3Score">0 pts</span>
+          <div class="w-full bg-gradient-to-t from-slate-900 to-slate-800 h-20 rounded-t-xl flex items-center justify-center text-lg font-black text-amber-600 border-t-2 border-amber-700">
+            3rd 🥉
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex flex-col sm:flex-row gap-3 pt-4">
+        <button id="podiumRestartBtn" onclick="requestRestartGame()" class="hidden flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-black py-3.5 rounded-xl uppercase tracking-wider text-xs transition">
+          Play Again with Same Players
+        </button>
+        <button onclick="showScreen('homeScreen')" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 font-black py-3.5 rounded-xl uppercase tracking-wider text-xs transition">
+          Back to Main Menu
+        </button>
+      </div>
+    <!-- SCREEN 8: TAMIL NADU TEXTBOOK PDF REPOSITORY MODAL -->
+    <div id="textbooksModal" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
+      <div class="glass-card max-w-3xl w-full rounded-3xl border border-amber-500/40 p-6 md:p-8 space-y-6 shadow-2xl relative my-8">
+        <!-- Close Button -->
+        <button onclick="closeTextbooksModal()" class="absolute top-5 right-5 p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+
+        <div class="space-y-2">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold">
+            📚 TN SCERT • Samacheer Kalvi
+          </div>
+          <h2 class="text-2xl md:text-3xl font-black text-white">
+            Tamil Nadu State Board Textbooks (English Medium)
+          </h2>
+          <p class="text-xs text-slate-400">
+            Official government syllabus textbooks for Classes 6, 7 & 8. Read chapters and practice battle questions!
+          </p>
+        </div>
+
+        <!-- Grade Selector Tabs -->
+        <div class="flex border-b border-slate-700 gap-2">
+          <button onclick="switchTextbookTab('6')" id="tabBtn6" class="px-5 py-2.5 font-bold text-xs uppercase tracking-wider border-b-2 border-amber-400 text-amber-300 transition">
+            Class 6 (Std VI)
+          </button>
+          <button onclick="switchTextbookTab('7')" id="tabBtn7" class="px-5 py-2.5 font-bold text-xs uppercase tracking-wider border-b-2 border-transparent text-slate-400 hover:text-white transition">
+            Class 7 (Std VII)
+          </button>
+          <button onclick="switchTextbookTab('8')" id="tabBtn8" class="px-5 py-2.5 font-bold text-xs uppercase tracking-wider border-b-2 border-transparent text-slate-400 hover:text-white transition">
+            Class 8 (Std VIII)
+          </button>
+        </div>
+
+        <!-- Subject Books Cards Grid -->
+        <div id="textbookSubjectsList" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Dynamically populated via JS -->
+        </div>
+
+        <!-- Official Portal Footer -->
+        <div class="pt-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-400 gap-3">
+          <span>Official Portal: <a href="https://textbooksonline.tn.nic.in/" target="_blank" class="text-indigo-400 underline font-semibold">textbooksonline.tn.nic.in</a></span>
+          <button onclick="closeTextbooksModal()" class="w-full sm:w-auto px-6 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold transition">
+            Close Viewer
+          </button>
+        </div>
+      </div>
+    <!-- SCREEN 9: COMPETITIVE LEADERBOARD & RANK TIERS MODAL -->
+    <div id="leaderboardModal" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
+      <div class="glass-card max-w-3xl w-full rounded-3xl border border-purple-500/40 p-6 md:p-8 space-y-6 shadow-2xl relative my-8">
+        <!-- Close Button -->
+        <button onclick="closeLeaderboardModal()" class="absolute top-5 right-5 p-2 rounded-xl bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700 transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+
+        <div class="space-y-2">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-bold">
+            🏆 All-India School Rankings
+          </div>
+          <h2 class="text-2xl md:text-3xl font-black text-white">
+            Class & Subject Leaderboard
+          </h2>
+          <!-- Rank Tier Progression Bar -->
+          <div class="flex flex-wrap items-center gap-2 pt-1 text-[11px] font-black">
+            <span class="text-slate-400">Ranks:</span>
+            <span class="px-2 py-0.5 rounded bg-amber-700/20 text-amber-500 border border-amber-700/30">🥉 Bronze 1, 2, 3</span>
+            <span class="text-slate-600">→</span>
+            <span class="px-2 py-0.5 rounded bg-slate-400/20 text-slate-200 border border-slate-400/30">🥈 Silver 1, 2, 3</span>
+            <span class="text-slate-600">→</span>
+            <span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">🥇 Gold 1, 2, 3</span>
+            <span class="text-slate-600">→</span>
+            <span class="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">💎 Diamond 1, 2, 3</span>
+          </div>
+        </div>
+
+        <!-- Filter Selectors: Class and Subject -->
+        <div class="grid grid-cols-2 gap-3 bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+          <div>
+            <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Standard / Class</label>
+            <select id="lbGradeSelect" onchange="fetchLeaderboardData()" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs font-bold text-white focus:ring-2 focus:ring-purple-500">
+              <option value="1">Class 1</option>
+              <option value="2">Class 2</option>
+              <option value="3">Class 3</option>
+              <option value="4">Class 4</option>
+              <option value="5">Class 5</option>
+              <option value="6" selected>Class 6</option>
+              <option value="7">Class 7</option>
+              <option value="8">Class 8</option>
+              <option value="9">Class 9</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Subject</label>
+            <select id="lbSubjectSelect" onchange="fetchLeaderboardData()" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs font-bold text-white focus:ring-2 focus:ring-purple-500">
+              <option value="Science" selected>Science</option>
+              <option value="Mathematics">Mathematics</option>
+              <option value="Social Science">Social Science</option>
+              <option value="English">English</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Top Students Table List -->
+        <div class="space-y-2 max-h-[360px] overflow-y-auto pr-1" id="leaderboardListContainer">
+          <!-- Injected via JS -->
+        </div>
+
+        <div class="pt-2 flex justify-between items-center text-xs text-slate-400 border-t border-slate-800">
+          <span>Points earned in 10-Player Mega Arena promote your rank tier!</span>
+          <button onclick="closeLeaderboardModal()" class="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold transition">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- JAVASCRIPT GAME LOGIC & NETWORKING -->
+  <script>
+    // Audio Synthesizer via Web Audio API (100% offline, no audio assets needed)
+    let audioCtx = null;
+    let audioEnabled = true;
+
+    function getAudioContext() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      return audioCtx;
+    }
+
+    function toggleAudio() {
+      audioEnabled = !audioEnabled;
+      const btn = document.getElementById('soundToggleBtn');
+      btn.innerHTML = audioEnabled 
+        ? '<i data-lucide="volume-2" class="w-5 h-5"></i>' 
+        : '<i data-lucide="volume-x" class="w-5 h-5 text-rose-400"></i>';
+      lucide.createIcons();
+    }
+
+    function playSound(type) {
+      if (!audioEnabled) return;
+      try {
+        const ctx = getAudioContext();
+        const now = ctx.currentTime;
+
+        if (type === 'tick') {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(600, now);
+          gain.gain.setValueAtTime(0.05, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.05);
+        } else if (type === 'correct') {
+          [523.25, 659.25, 783.99, 1046.50].forEach((freq, idx) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.frequency.setValueAtTime(freq, now + idx * 0.08);
+            gain.gain.setValueAtTime(0.15, now + idx * 0.08);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.3);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now + idx * 0.08);
+            osc.stop(now + idx * 0.08 + 0.3);
+          });
+        } else if (type === 'wrong') {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(150, now);
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.35);
+        } else if (type === 'buzzer') {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(440, now);
+          osc.frequency.setValueAtTime(330, now + 0.1);
+          gain.gain.setValueAtTime(0.25, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.3);
+        } else if (type === 'victory') {
+          [440, 554.37, 659.25, 880].forEach((freq, idx) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.frequency.setValueAtTime(freq, now + idx * 0.12);
+            gain.gain.setValueAtTime(0.2, now + idx * 0.12);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.12 + 0.5);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now + idx * 0.12);
+            osc.stop(now + idx * 0.12 + 0.5);
+          });
+        }
+      } catch (e) {
+        console.warn("Audio playback not allowed yet", e);
+      }
+    }
+
+    // App State
+    let socket = null;
+    let curriculumData = null;
+    let currentRoomCode = null;
+    let isHost = false;
+    let currentQuestion = null;
+    let timerInterval = null;
+    let remainingTime = 15;
+    let selectedGameType = 'all';
+    let isSoloMode = false;
+    let soloQuestions = [];
+    let soloRoundIndex = 0;
+    let soloScore = 0;
+
+    const AVATARS = ["🚀", "🦁", "🦉", "🦊", "🤖", "⚡"];
+    let selectedAvatar = "🚀";
+
+    // Setup Avatars
+    function renderAvatarPicker() {
+      const grid = document.getElementById('avatarGrid');
+      grid.innerHTML = '';
+      AVATARS.forEach(av => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `p-3 text-2xl rounded-xl border transition ${selectedAvatar === av ? 'border-indigo-400 bg-indigo-500/30 scale-105' : 'border-slate-700 bg-slate-900/60 hover:bg-slate-800'}`;
+        btn.textContent = av;
+        btn.onclick = () => {
+          selectedAvatar = av;
+          document.getElementById('navAvatar').textContent = av;
+          renderAvatarPicker();
+        };
+        grid.appendChild(btn);
+      });
+    }
+
+    // Screen Switching Router
+    function showScreen(screenId) {
+      const screens = ['homeScreen', 'soloHubScreen', 'hostConfigScreen', 'joinRoomScreen', 'lobbyScreen', 'gameScreen', 'roundRevealScreen', 'podiumScreen'];
+      screens.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+      });
+      const target = document.getElementById(screenId);
+      if (target) target.classList.remove('hidden');
+
+      // Update Top Profile
+      const pName = document.getElementById('playerNameInput').value.trim() || 'Student';
+      document.getElementById('navName').textContent = pName;
+      document.getElementById('navAvatar').textContent = selectedAvatar;
+
+      lucide.createIcons();
+    }
+
+    // Show Toast
+    function showToast(msg, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `px-4 py-2.5 rounded-xl text-xs font-bold text-white shadow-xl transition-all duration-300 pointer-events-auto flex items-center gap-2 ${type === 'error' ? 'bg-rose-600' : 'bg-slate-800 border border-slate-700'}`;
+      toast.innerHTML = `<span>${type === 'error' ? '⚠️' : '📢'}</span> <span>${msg}</span>`;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    // Initialize Socket Connection
+    function initSocket() {
+      if (socket) return;
+      socket = io();
+
+      socket.on('connect', () => {
+        console.log("Connected to EduBattle Server, id:", socket.id);
+      });
+
+      socket.on('error_msg', (data) => {
+        showToast(data.message, 'error');
+      });
+
+      socket.on('room_created', (data) => {
+        currentRoomCode = data.room_code;
+        isHost = true;
+        renderLobby(data);
+        showScreen('lobbyScreen');
+        showToast(`Room created! Code: ${data.room_code}`);
+      });
+
+      socket.on('room_joined', (data) => {
+        currentRoomCode = data.room_code;
+        isHost = data.is_host;
+        renderLobby(data);
+        showScreen('lobbyScreen');
+        showToast(`Joined Room ${data.room_code}`);
+      });
+
+      socket.on('match_found', (data) => {
+        currentRoomCode = data.room_code;
+        isHost = data.is_host;
+        renderLobby(data);
+        showScreen('lobbyScreen');
+        showToast(`Match Found! Opponent Connected ⚡`);
+      });
+
+      socket.on('queued_for_match', (data) => {
+        showToast(data.message);
+      });
+
+      socket.on('player_joined', (data) => {
+        showToast(`${data.new_player} joined the room!`);
+        updateLobbyPlayers(data.players);
+      });
+
+      socket.on('player_left', (data) => {
+        showToast(`${data.player_name} left the arena.`);
+        updateLobbyPlayers(data.players);
+      });
+
+      socket.on('host_changed', (data) => {
+        showToast(`${data.new_host} is now the Room Host! 👑`);
+        if (socket.id === data.host_sid) {
+          isHost = true;
+          document.getElementById('hostStartGameBtn').classList.remove('hidden');
+          document.getElementById('nonHostWaitingNotice').classList.add('hidden');
+        }
+      });
+
+      socket.on('round_started', (data) => {
+        showScreen('gameScreen');
+        renderQuestion(data.question);
+      });
+
+      socket.on('buzz_locked', (data) => {
+        handleBuzzerLock(data);
+      });
+
+      socket.on('answer_feedback', (data) => {
+        showFeedback(data);
+      });
+
+      socket.on('round_ended', (data) => {
+        showRoundReveal(data);
+      });
+
+      socket.on('game_over', (data) => {
+        showPodium(data);
+      });
+
+      socket.on('game_reset', (data) => {
+        showScreen('lobbyScreen');
+        showToast("Room reset for another round!");
+      });
+
+      socket.on('chat_broadcast', (data) => {
+        if (data.emoji) {
+          triggerFloatingEmoji(data.emoji);
+        }
+      });
+
+      socket.on('mega_arena_joined', (data) => {
+        currentRoomCode = data.room_code;
+        isHost = data.is_host;
+        renderLobby(data);
+        showScreen('lobbyScreen');
+        showToast(`🌐 Joined 10-Player Mega Arena! (${data.total_players} Students)`);
+      });
+    }
+
+    // Load Syllabus Tree from Backend
+    async function loadCurriculum() {
+      try {
+        const res = await fetch('/api/curriculum');
+        curriculumData = await res.json();
+        syncCurriculumDropdowns();
+      } catch (e) {
+        console.error("Failed to load syllabus tree", e);
+      }
+    }
+
+    function syncCurriculumDropdowns() {
+      if (!curriculumData) return;
+      const board = document.getElementById('hostBoardSelect').value;
+      const grade = document.getElementById('hostGradeSelect').value;
+      const subjectSelect = document.getElementById('hostSubjectSelect');
+
+      const bData = curriculumData[board] || curriculumData['CBSE'];
+      const cData = bData[grade] || bData[Object.keys(bData)[0]];
+
+      subjectSelect.innerHTML = '';
+      Object.keys(cData).forEach(sub => {
+        const opt = document.createElement('option');
+        opt.value = sub;
+        opt.textContent = sub;
+        subjectSelect.appendChild(opt);
+      });
+
+      syncChaptersDropdown();
+    }
+
+    function syncChaptersDropdown() {
+      if (!curriculumData) return;
+      const board = document.getElementById('hostBoardSelect').value;
+      const grade = document.getElementById('hostGradeSelect').value;
+      const subject = document.getElementById('hostSubjectSelect').value;
+      const chapterSelect = document.getElementById('hostChapterSelect');
+
+      const bData = curriculumData[board] || curriculumData['CBSE'];
+      const cData = bData[grade] || bData[Object.keys(bData)[0]];
+      const chapters = (cData && cData[subject]) ? cData[subject] : [];
+
+      chapterSelect.innerHTML = '<option value="">All Chapters (Full Syllabus)</option>';
+      chapters.forEach(ch => {
+        const opt = document.createElement('option');
+        opt.value = ch;
+        opt.textContent = ch;
+        chapterSelect.appendChild(opt);
+      });
+    }
+
+    function selectGameType(type) {
+      selectedGameType = type;
+      ['all', 'quiz', 'buzz', 'fill_in', 'match'].forEach(t => {
+        const btn = document.getElementById(`gameType_${t}`);
+        if (btn) {
+          if (t === type) {
+            btn.className = 'game-type-chip p-3 rounded-xl border border-indigo-400 bg-indigo-500/30 text-center transition scale-105';
+          } else {
+            btn.className = 'game-type-chip p-3 rounded-xl border border-slate-700 bg-slate-800 text-center hover:bg-slate-700 transition';
+          }
+        }
+      });
+    }
+
+    let currentSoloGameType = 'all';
+    function selectSoloGameType(type) {
+      currentSoloGameType = type;
+      ['all', 'quiz', 'buzz', 'fill_in', 'match'].forEach(t => {
+        const btn = document.getElementById(`soloType_${t}`);
+        if (btn) {
+          if (t === type) {
+            btn.className = 'p-2.5 rounded-xl border border-indigo-400 bg-indigo-500/30 text-center transition scale-105';
+          } else {
+            btn.className = 'p-2.5 rounded-xl border border-slate-700 bg-slate-800 text-center transition hover:bg-slate-700';
+          }
+        }
+      });
+    }
+
+    function launchModeSeparately(mode, playType = 'solo') {
+      if (playType === 'solo') {
+        openSoloHub();
+        selectSoloGameType(mode);
+        showToast(`Selected ${mode.toUpperCase()} mode for Solo Learn & Practice!`);
+      } else {
+        openHostSettings();
+        selectGameType(mode);
+        showToast(`Configured room for ${mode.toUpperCase()} battle!`);
+      }
+    }
+
+    // Host Room Action
+    function openHostSettings() {
+      showScreen('hostConfigScreen');
+      selectGameType('all');
+    }
+
+    function submitCreateRoom() {
+      initSocket();
+      const pName = document.getElementById('playerNameInput').value.trim() || 'Student';
+      const board = document.getElementById('hostBoardSelect').value;
+      const grade = document.getElementById('hostGradeSelect').value;
+      const subject = document.getElementById('hostSubjectSelect').value;
+      const chapter = document.getElementById('hostChapterSelect').value;
+      const difficulty = document.getElementById('hostDifficulty').value;
+      const rounds = parseInt(document.getElementById('hostRounds').value);
+      const timer_seconds = parseInt(document.getElementById('hostTimer').value);
+
+      socket.emit('create_room', {
+        name: pName,
+        avatar: selectedAvatar,
+        board,
+        grade,
+        subject,
+        chapter,
+        game_type: selectedGameType,
+        difficulty,
+        rounds,
+        timer_seconds,
+        is_private: true
+      });
+    }
+
+    function submitJoinRoom() {
+      initSocket();
+      const code = document.getElementById('joinRoomCodeInput').value.trim().toUpperCase();
+      const pName = document.getElementById('playerNameInput').value.trim() || 'Student';
+      if (!code || code.length < 4) {
+        showToast("Please enter a valid 5-letter Room Code", "error");
+        return;
+      }
+      socket.emit('join_room', {
+        room_code: code,
+        name: pName,
+        avatar: selectedAvatar
+      });
+    }
+
+    function startRandomMultiplayer() {
+      initSocket();
+      const pName = document.getElementById('playerNameInput').value.trim() || 'Student';
+      const grade = document.getElementById('userGrade').value;
+      const board = document.getElementById('userBoard').value;
+
+      showToast("Searching for match in Class " + grade + "...");
+      socket.emit('join_random_queue', {
+        name: pName,
+        avatar: selectedAvatar,
+        board,
+        grade
+      });
+    }
+
+    // Render Lobby
+    function renderLobby(data) {
+      document.getElementById('lobbyRoomCode').textContent = data.room_code;
+      const st = data.settings || {};
+      
+      const pillsContainer = document.getElementById('lobbySettingsPills');
+      pillsContainer.innerHTML = `
+        <span class="px-2.5 py-1 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Class ${st.grade || '5'} (${st.board || 'CBSE'})</span>
+        <span class="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 border border-slate-700">${st.subject || 'Science'}</span>
+        <span class="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30">${st.game_type === 'buzz' ? '🚨 Buzzer' : (st.game_type === 'quiz' ? '🎯 Quiz' : '🎲 Mixed')}</span>
+        <span class="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 border border-slate-700">${st.rounds || 5} Rounds</span>
+      `;
+
+      updateLobbyPlayers(data.players || []);
+
+      const hostBtn = document.getElementById('hostStartGameBtn');
+      const waitNotice = document.getElementById('nonHostWaitingNotice');
+      if (data.is_host) {
+        hostBtn.classList.remove('hidden');
+        waitNotice.classList.add('hidden');
+      } else {
+        hostBtn.classList.add('hidden');
+        waitNotice.classList.remove('hidden');
+      }
+    }
+
+    function updateLobbyPlayers(players) {
+      document.getElementById('playerCount').textContent = players.length;
+      const grid = document.getElementById('lobbyPlayerGrid');
+      grid.innerHTML = '';
+
+      players.forEach(p => {
+        const card = document.createElement('div');
+        card.className = 'glass-card p-4 rounded-xl border border-slate-700 text-center space-y-1 relative';
+        card.innerHTML = `
+          ${p.is_host ? '<span class="absolute top-2 right-2 text-xs" title="Room Host">👑</span>' : ''}
+          <div class="text-3xl mb-1">${p.avatar || '🚀'}</div>
+          <div class="font-extrabold text-sm text-white truncate">${p.name}</div>
+          <div class="text-[10px] text-slate-400 font-semibold">${p.is_host ? 'Host' : 'Ready'}</div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    function copyRoomCode() {
+      navigator.clipboard.writeText(currentRoomCode || '');
+      showToast("Room Code copied to clipboard! Share with friends.");
+    }
+
+    function requestStartGame() {
+      if (socket && currentRoomCode) {
+        socket.emit('start_game', { room_code: currentRoomCode });
+      }
+    }
+
+    function leaveCurrentRoom() {
+      if (socket) {
+        socket.disconnect();
+        socket = null;
+      }
+      showScreen('homeScreen');
+    }
+
+    // Active Game Render
+    function renderQuestion(q) {
+      currentQuestion = q;
+      document.getElementById('gameRoundBadge').textContent = `Round ${q.round_num} / ${q.total_rounds}`;
+      document.getElementById('gameSubjectBadge').textContent = `${q.subject} • ${q.chapter || 'All'}`;
+      document.getElementById('questionDiffIndicator').textContent = q.difficulty.toUpperCase();
+      document.getElementById('questionText').textContent = q.question;
+      
+      // Reset Feedback
+      document.getElementById('feedbackBanner').classList.add('hidden');
+      document.getElementById('buzzerLockBanner').classList.add('hidden');
+
+      // Setup Timer
+      remainingTime = q.timer_seconds || 15;
+      const timerNum = document.getElementById('gameTimerNum');
+      const timerBar = document.getElementById('gameTimerBar');
+      timerNum.textContent = remainingTime;
+      timerBar.style.width = '100%';
+
+      if (timerInterval) clearInterval(timerInterval);
+      const totalSec = remainingTime;
+
+      timerInterval = setInterval(() => {
+        remainingTime--;
+        timerNum.textContent = remainingTime;
+        const pct = Math.max(0, (remainingTime / totalSec) * 100);
+        timerBar.style.width = `${pct}%`;
+
+        if (remainingTime <= 3 && remainingTime > 0) {
+          playSound('tick');
+        }
+
+        if (remainingTime <= 0) {
+          clearInterval(timerInterval);
+          if (isSoloMode) {
+            handleSoloTimeout();
+          } else if (isHost) {
+            socket.emit('time_up', { room_code: currentRoomCode });
+          }
+        }
+      }, 1000);
+
+      // Render Specific Gameplay Type
+      const quizArea = document.getElementById('quizOptionsContainer');
+      const fillArea = document.getElementById('fillInContainer');
+      const buzzArea = document.getElementById('buzzerContainer');
+      const matchArea = document.getElementById('matchContainer');
+
+      quizArea.classList.add('hidden');
+      fillArea.classList.add('hidden');
+      buzzArea.classList.add('hidden');
+      if (matchArea) matchArea.classList.add('hidden');
+
+      if (q.type === 'fill_in') {
+        document.getElementById('questionTypeIndicator').textContent = '✏️ Fill in the Blanks';
+        fillArea.classList.remove('hidden');
+        document.getElementById('fillInInput').value = '';
+        document.getElementById('fillInInput').disabled = false;
+        document.getElementById('fillInInput').focus();
+      } else if (q.type === 'buzz') {
+        document.getElementById('questionTypeIndicator').textContent = '🚨 Fast Finger Buzzer Battle';
+        buzzArea.classList.remove('hidden');
+        const buzzBtn = document.getElementById('smashBuzzerBtn');
+        buzzBtn.disabled = false;
+        // Also render options hidden until buzzed
+        quizArea.classList.remove('hidden');
+        renderQuizButtons(q.options, true);
+      } else if (q.type === 'match') {
+        document.getElementById('questionTypeIndicator').textContent = '🧩 Match the Following (Connect Pairs)';
+        if (matchArea) matchArea.classList.remove('hidden');
+        renderMatchQuestion(q.pairs || []);
+      } else {
+        document.getElementById('questionTypeIndicator').textContent = '🎯 Speed Quiz (Choose 1 of 4)';
+        quizArea.classList.remove('hidden');
+        renderQuizButtons(q.options, false);
+      }
+    }
+
+    // MATCH THE FOLLOWING LOGIC
+    let currentMatchPairs = [];
+    let selectedMatchLeft = null;
+    let userMatchAssignments = {}; // { leftItem: rightItem }
+    let cachedShuffledRight = [];
+
+    const MATCH_COLORS = [
+      { border: 'border-indigo-400', bg: 'bg-indigo-950/70', badge: 'bg-indigo-500 text-white' },
+      { border: 'border-emerald-400', bg: 'bg-emerald-950/70', badge: 'bg-emerald-500 text-white' },
+      { border: 'border-amber-400', bg: 'bg-amber-950/70', badge: 'bg-amber-500 text-slate-950 font-black' },
+      { border: 'border-cyan-400', bg: 'bg-cyan-950/70', badge: 'bg-cyan-500 text-slate-950 font-black' },
+      { border: 'border-purple-400', bg: 'bg-purple-950/70', badge: 'bg-purple-500 text-white' }
+    ];
+
+    function renderMatchQuestion(pairs) {
+      currentMatchPairs = pairs || [];
+      userMatchAssignments = {};
+      selectedMatchLeft = null;
+
+      // Shuffle right items once per question
+      cachedShuffledRight = [...currentMatchPairs.map(p => p.right)].sort(() => Math.random() - 0.5);
+
+      updateMatchDisplay();
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function updateMatchDisplay() {
+      const colA = document.getElementById('matchColA');
+      const colB = document.getElementById('matchColB');
+      if (!colA || !colB) return;
+      colA.innerHTML = '';
+      colB.innerHTML = '';
+
+      const leftItems = currentMatchPairs.map(p => p.left);
+      const rightItems = cachedShuffledRight;
+
+      // Render Column A (Left Terms)
+      leftItems.forEach((leftVal, idx) => {
+        const isSelected = (selectedMatchLeft === leftVal);
+        const assignedRight = userMatchAssignments[leftVal];
+        const isMatched = !!assignedRight;
+        const color = isMatched ? MATCH_COLORS[idx % MATCH_COLORS.length] : null;
+
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = `w-full p-3 rounded-xl border text-left transition flex items-center justify-between group ${
+          isSelected 
+            ? 'border-indigo-400 bg-indigo-600/30 ring-2 ring-indigo-400 scale-[1.02]' 
+            : (isMatched ? `${color.border} ${color.bg}` : 'border-slate-700 bg-slate-900/80 hover:border-slate-500')
+        }`;
+        card.innerHTML = `
+          <div class="flex items-center gap-2.5">
+            <span class="w-6 h-6 rounded-lg text-xs font-black flex items-center justify-center ${isMatched ? color.badge : (isSelected ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400')}">
+              ${idx + 1}
+            </span>
+            <span class="text-xs md:text-sm font-bold text-white">${leftVal}</span>
+          </div>
+          ${isMatched ? `<span class="text-[10px] font-bold ${color.badge} px-2 py-0.5 rounded-full">Linked ✓</span>` : ''}
+        `;
+        card.onclick = () => {
+          selectedMatchLeft = leftVal;
+          updateMatchDisplay();
+        };
+        colA.appendChild(card);
+      });
+
+      // Render Column B (Right Matches)
+      rightItems.forEach((rightVal, idx) => {
+        // Find if this rightVal is matched to any leftVal
+        const matchedLeft = Object.keys(userMatchAssignments).find(k => userMatchAssignments[k] === rightVal);
+        const isMatched = !!matchedLeft;
+        const leftIdx = matchedLeft ? leftItems.indexOf(matchedLeft) : -1;
+        const color = isMatched && leftIdx >= 0 ? MATCH_COLORS[leftIdx % MATCH_COLORS.length] : null;
+
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = `w-full p-3 rounded-xl border text-left transition flex items-center justify-between group ${
+          isMatched ? `${color.border} ${color.bg}` : (selectedMatchLeft ? 'border-indigo-500/40 bg-slate-900/80 hover:border-amber-400 hover:bg-slate-800' : 'border-slate-700 bg-slate-900/80')
+        }`;
+        const letter = String.fromCharCode(65 + idx);
+        card.innerHTML = `
+          <div class="flex items-center gap-2.5">
+            <span class="w-6 h-6 rounded-lg text-xs font-black flex items-center justify-center ${isMatched ? color.badge : 'bg-slate-800 text-slate-400'}">
+              ${letter}
+            </span>
+            <span class="text-xs md:text-sm font-bold text-slate-200">${rightVal}</span>
+          </div>
+          ${isMatched ? `<span class="text-[10px] font-bold ${color.badge} px-2 py-0.5 rounded-full">Pair #${leftIdx + 1}</span>` : ''}
+        `;
+        card.onclick = () => {
+          if (!selectedMatchLeft) {
+            showToast("Click an item from Column A first!", "info");
+            return;
+          }
+          // Remove rightVal if already assigned elsewhere
+          Object.keys(userMatchAssignments).forEach(k => {
+            if (userMatchAssignments[k] === rightVal) delete userMatchAssignments[k];
+          });
+          userMatchAssignments[selectedMatchLeft] = rightVal;
+          selectedMatchLeft = null;
+          updateMatchDisplay();
+        };
+        colB.appendChild(card);
+      });
+
+      // Update Match Status & Submit button
+      const matchedCount = Object.keys(userMatchAssignments).length;
+      const totalPairs = currentMatchPairs.length;
+      const statusEl = document.getElementById('matchStatusText');
+      if (statusEl) {
+        statusEl.textContent = `Matched: ${matchedCount} / ${totalPairs} pairs`;
+      }
+      const submitBtn = document.getElementById('submitMatchBtn');
+      if (submitBtn) {
+        submitBtn.disabled = (matchedCount === 0);
+      }
+    }
+
+    function resetMatchPairs() {
+      userMatchAssignments = {};
+      selectedMatchLeft = null;
+      updateMatchDisplay();
+      showToast("Pairs reset! Click Column A to begin matching.", "info");
+    }
+
+    function submitMatchAnswer() {
+      const payload = JSON.stringify(userMatchAssignments);
+      const submitBtn = document.getElementById('submitMatchBtn');
+      if (submitBtn) submitBtn.disabled = true;
+
+      if (isSoloMode) {
+        processSoloAnswer(payload);
+      } else if (socket) {
+        socket.emit('submit_answer', {
+          room_code: currentRoomCode,
+          answer: payload
+        });
+      }
+    }
+
+    function renderQuizButtons(options, disabledInitially = false) {
+      const container = document.getElementById('quizOptionsContainer');
+      container.innerHTML = '';
+      const letters = ['A', 'B', 'C', 'D'];
+
+      options.forEach((opt, idx) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.disabled = disabledInitially;
+        btn.className = `quiz-option-btn p-4 rounded-xl border border-slate-700 bg-slate-900/90 hover:border-indigo-400 hover:bg-indigo-950/40 text-left transition flex items-center gap-3 group ${disabledInitially ? 'opacity-40 cursor-not-allowed' : ''}`;
+        btn.innerHTML = `
+          <span class="w-8 h-8 rounded-lg bg-slate-800 text-slate-300 group-hover:bg-indigo-600 group-hover:text-white flex items-center justify-center font-bold text-sm transition">
+            ${letters[idx] || (idx+1)}
+          </span>
+          <span class="text-sm md:text-base font-bold text-white">${opt}</span>
+        `;
+        btn.onclick = () => submitQuizAnswer(opt, btn);
+        container.appendChild(btn);
+      });
+    }
+
+    function pressBuzzer() {
+      playSound('buzzer');
+      if (isSoloMode) {
+        // Solo Buzzer: unlock immediately
+        document.getElementById('smashBuzzerBtn').disabled = true;
+        document.querySelectorAll('.quiz-option-btn').forEach(b => {
+          b.disabled = false;
+          b.classList.remove('opacity-40', 'cursor-not-allowed');
+        });
+      } else if (socket) {
+        socket.emit('buzz_press', { room_code: currentRoomCode });
+      }
+    }
+
+    function handleBuzzerLock(data) {
+      playSound('buzzer');
+      const banner = document.getElementById('buzzerLockBanner');
+      banner.classList.remove('hidden');
+      document.getElementById('buzzerLockText').textContent = `${data.buzzed_avatar} ${data.buzzed_name} buzzed first! Answering...`;
+
+      const amIBuzzer = (socket.id === data.buzzed_sid);
+      document.getElementById('smashBuzzerBtn').disabled = true;
+
+      // Unlock options only for the student who pressed buzzer!
+      document.querySelectorAll('.quiz-option-btn').forEach(b => {
+        if (amIBuzzer) {
+          b.disabled = false;
+          b.classList.remove('opacity-40', 'cursor-not-allowed');
+          b.classList.add('border-indigo-400');
+        } else {
+          b.disabled = true;
+          b.classList.add('opacity-40', 'cursor-not-allowed');
+        }
+      });
+    }
+
+    function submitQuizAnswer(chosenAnswer, btnElement) {
+      // Disable all buttons in container
+      document.querySelectorAll('.quiz-option-btn').forEach(b => b.disabled = true);
+      btnElement.classList.add('ring-2', 'ring-indigo-400', 'bg-indigo-900/60');
+
+      if (isSoloMode) {
+        processSoloAnswer(chosenAnswer);
+      } else if (socket) {
+        socket.emit('submit_answer', {
+          room_code: currentRoomCode,
+          answer: chosenAnswer
+        });
+      }
+    }
+
+    function submitFillInAnswer() {
+      const val = document.getElementById('fillInInput').value.trim();
+      if (!val) return;
+      document.getElementById('fillInInput').disabled = true;
+
+      if (isSoloMode) {
+        processSoloAnswer(val);
+      } else if (socket) {
+        socket.emit('submit_answer', {
+          room_code: currentRoomCode,
+          answer: val
+        });
+      }
+    }
+
+    function showFeedback(data) {
+      if (data.is_correct) {
+        playSound('correct');
+        confetti({ particleCount: 30, spread: 60, origin: { y: 0.7 } });
+      } else {
+        playSound('wrong');
+      }
+
+      const banner = document.getElementById('feedbackBanner');
+      banner.classList.remove('hidden');
+
+      if (data.is_correct) {
+        banner.className = 'glass-card p-4 rounded-xl border border-emerald-500/50 bg-emerald-950/40 flex items-center justify-between animate-bounce-short';
+        document.getElementById('feedbackIcon').textContent = '🌟';
+        document.getElementById('feedbackTitle').textContent = 'Brilliant! Correct Answer';
+        document.getElementById('feedbackTitle').className = 'font-bold text-sm text-emerald-300';
+        document.getElementById('feedbackPoints').textContent = `+${data.points_earned} pts`;
+      } else {
+        banner.className = 'glass-card p-4 rounded-xl border border-rose-500/50 bg-rose-950/40 flex items-center justify-between';
+        document.getElementById('feedbackIcon').textContent = '💡';
+        document.getElementById('feedbackTitle').textContent = `Incorrect! Correct: ${data.correct_answer}`;
+        document.getElementById('feedbackTitle').className = 'font-bold text-sm text-rose-300';
+        document.getElementById('feedbackPoints').textContent = data.points_earned ? `${data.points_earned} pts` : `0 pts`;
+      }
+
+      document.getElementById('feedbackExplanation').textContent = data.explanation || '';
+    }
+
+    function showRoundReveal(data) {
+      if (timerInterval) clearInterval(timerInterval);
+      showScreen('roundRevealScreen');
+
+      document.getElementById('revealCorrectAns').textContent = `Correct Answer: ${data.correct_answer}`;
+      document.getElementById('revealExplanation').textContent = data.explanation || '';
+
+      const list = document.getElementById('roundLeaderboardList');
+      list.innerHTML = '';
+
+      (data.leaderboard || []).forEach((p, idx) => {
+        const item = document.createElement('div');
+        item.className = 'flex items-center justify-between p-3 rounded-xl bg-slate-900/80 border border-slate-700/60';
+        item.innerHTML = `
+          <div class="flex items-center gap-3">
+            <span class="w-6 text-center font-black text-sm ${idx === 0 ? 'text-amber-400' : 'text-slate-400'}">#${idx + 1}</span>
+            <span class="text-xl">${p.avatar || '🚀'}</span>
+            <span class="font-bold text-sm text-white">${p.name}</span>
+          </div>
+          <div class="flex items-center gap-2">
+            ${p.streak > 1 ? `<span class="text-xs bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded font-bold">🔥 ${p.streak}x</span>` : ''}
+            <span class="font-black text-sm text-indigo-300">${p.score} pts</span>
+          </div>
+        `;
+        list.appendChild(item);
+      });
+
+      const nextBtn = document.getElementById('hostNextRoundBtn');
+      const waitNotice = document.getElementById('nonHostRoundWaiting');
+      if (isHost || isSoloMode) {
+        nextBtn.classList.remove('hidden');
+        waitNotice.classList.add('hidden');
+      } else {
+        nextBtn.classList.add('hidden');
+        waitNotice.classList.remove('hidden');
+      }
+    }
+
+    function requestNextRound() {
+      if (isSoloMode) {
+        nextSoloRound();
+      } else if (socket && currentRoomCode) {
+        socket.emit('host_next_round', { room_code: currentRoomCode });
+      }
+    }
+
+    function showPodium(data) {
+      showScreen('podiumScreen');
+      playSound('victory');
+      confetti({ particleCount: 150, spread: 100, origin: { y: 0.6 } });
+
+      const lb = data.leaderboard || [];
+      const p1 = lb[0] || { name: 'Player 1', avatar: '🚀', score: 0 };
+      const p2 = lb[1] || { name: '-', avatar: '🦁', score: 0 };
+      const p3 = lb[2] || { name: '-', avatar: '🦉', score: 0 };
+
+      document.getElementById('podium1Name').textContent = p1.name;
+      document.getElementById('podium1Avatar').textContent = p1.avatar;
+      document.getElementById('podium1Score').textContent = `${p1.score} pts`;
+
+      document.getElementById('podium2Name').textContent = p2.name;
+      document.getElementById('podium2Avatar').textContent = p2.avatar;
+      document.getElementById('podium2Score').textContent = `${p2.score} pts`;
+
+      document.getElementById('podium3Name').textContent = p3.name;
+      document.getElementById('podium3Avatar').textContent = p3.avatar;
+      document.getElementById('podium3Score').textContent = `${p3.score} pts`;
+
+      const restartBtn = document.getElementById('podiumRestartBtn');
+      if (isHost) {
+        restartBtn.classList.remove('hidden');
+      } else {
+        restartBtn.classList.add('hidden');
+      }
+    }
+
+    function requestRestartGame() {
+      if (socket && currentRoomCode) {
+        socket.emit('restart_game', { room_code: currentRoomCode });
+      }
+    }
+
+    // Floating Emoji Animation
+    function sendEmoji(emoji) {
+      triggerFloatingEmoji(emoji);
+      if (socket && currentRoomCode) {
+        socket.emit('send_chat', { room_code: currentRoomCode, emoji: emoji });
+      }
+    }
+
+    function triggerFloatingEmoji(emoji) {
+      const el = document.createElement('div');
+      el.className = 'floating-emoji';
+      el.textContent = emoji;
+      el.style.left = `${Math.random() * 80 + 10}vw`;
+      el.style.bottom = '40px';
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 2500);
+    }
+
+    // SOLO LEARN & PRACTICE IMPLEMENTATION (LEARN BEFORE PLAY + IN-BETWEEN DIFFICULTY)
+    let currentActiveDifficulty = 'medium';
+    let currentSoloSubject = 'Science';
+    let currentSoloChapter = '';
+    let currentSoloBoard = 'State Board';
+    let currentSoloGrade = '6';
+
+    function openSoloHub() {
+      showScreen('soloHubScreen');
+      syncSoloDropdowns();
+    }
+
+    function syncSoloDropdowns() {
+      if (!curriculumData) return;
+      currentSoloBoard = document.getElementById('soloBoard').value;
+      currentSoloGrade = document.getElementById('soloGrade').value;
+      const subSelect = document.getElementById('soloSubject');
+
+      const bData = curriculumData[currentSoloBoard] || curriculumData['State Board'] || curriculumData['CBSE'];
+      const cData = bData[currentSoloGrade] || bData[Object.keys(bData)[0]];
+
+      const currentSubVal = subSelect.value;
+      subSelect.innerHTML = '';
+      Object.keys(cData).forEach(sub => {
+        const opt = document.createElement('option');
+        opt.value = sub;
+        opt.textContent = sub;
+        if (sub === currentSubVal) opt.selected = true;
+        subSelect.appendChild(opt);
+      });
+
+      syncSoloChapters();
+    }
+
+    function syncSoloChapters() {
+      if (!curriculumData) return;
+      currentSoloBoard = document.getElementById('soloBoard').value;
+      currentSoloGrade = document.getElementById('soloGrade').value;
+      currentSoloSubject = document.getElementById('soloSubject').value;
+      const chSelect = document.getElementById('soloChapter');
+
+      const bData = curriculumData[currentSoloBoard] || curriculumData['State Board'] || curriculumData['CBSE'];
+      const cData = bData[currentSoloGrade] || bData[Object.keys(bData)[0]];
+      const chapters = (cData && cData[currentSoloSubject]) ? cData[currentSoloSubject] : [];
+
+      chSelect.innerHTML = '';
+      chapters.forEach((ch, idx) => {
+        const opt = document.createElement('option');
+        opt.value = ch;
+        opt.textContent = ch;
+        if (idx === 0) opt.selected = true;
+        chSelect.appendChild(opt);
+      });
+
+      syncSoloSubtopics();
+    }
+
+    async function syncSoloSubtopics() {
+      currentSoloBoard = document.getElementById('soloBoard').value;
+      currentSoloGrade = document.getElementById('soloGrade').value;
+      currentSoloSubject = document.getElementById('soloSubject').value;
+      currentSoloChapter = document.getElementById('soloChapter').value;
+      const subSelect = document.getElementById('soloSubtopic');
+
+      try {
+        const url = `/api/subtopics?board=${encodeURIComponent(currentSoloBoard)}&grade=${currentSoloGrade}&subject=${encodeURIComponent(currentSoloSubject)}&chapter=${encodeURIComponent(currentSoloChapter)}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        const subs = data.subtopics || ["All Subtopics (Full Chapter)"];
+
+        subSelect.innerHTML = '';
+        subs.forEach((sub, idx) => {
+          const opt = document.createElement('option');
+          opt.value = sub;
+          opt.textContent = sub;
+          if (idx === 0) opt.selected = true;
+          subSelect.appendChild(opt);
+        });
+      } catch (e) {
+        console.error("Error syncing subtopics", e);
+        subSelect.innerHTML = '<option value="All Subtopics (Full Chapter)">All Subtopics (Full Chapter)</option>';
+      }
+
+      loadStudyNotesForTopic();
+    }
+
+    async function loadStudyNotesForTopic() {
+      currentSoloChapter = document.getElementById('soloChapter').value;
+      currentSoloSubject = document.getElementById('soloSubject').value;
+      currentSoloGrade = document.getElementById('soloGrade').value;
+      currentSoloBoard = document.getElementById('soloBoard').value;
+      const currentSoloSubtopic = document.getElementById('soloSubtopic') ? document.getElementById('soloSubtopic').value : '';
+
+      document.getElementById('topicPdfBookTitle').textContent = `Loading: ${currentSoloChapter || currentSoloSubject}...`;
+
+      try {
+        const url = `/api/chapter-pdf?board=${encodeURIComponent(currentSoloBoard)}&grade=${currentSoloGrade}&subject=${encodeURIComponent(currentSoloSubject)}&chapter=${encodeURIComponent(currentSoloChapter)}&subtopic=${encodeURIComponent(currentSoloSubtopic)}`;
+        const res = await fetch(url);
+        const data = await res.json();
+
+        document.getElementById('topicPdfBookTitle').textContent = data.book_title || `Tamil Nadu Class ${currentSoloGrade} ${currentSoloSubject} (English Medium)`;
+        document.getElementById('topicPdfUnitTitle').textContent = `${data.title} • ${data.units || ''}`;
+        document.getElementById('topicTermBadge').textContent = data.term || 'Samacheer Kalvi';
+        document.getElementById('pdfPageIndicator').textContent = data.pages || 'Full Chapter';
+        document.getElementById('pdfReaderHeader').textContent = `${data.title} — Official Textbook`;
+
+        // Direct PDF link to official textbook
+        const pdfBtn = document.getElementById('openTopicPdfBtn');
+        if (pdfBtn) {
+          pdfBtn.href = data.pdf_url || 'https://www.tntextbooks.in/p/6th-books.html';
+        }
+
+        // Render Authentic Textbook Chapter Reading Sections
+        const container = document.getElementById('textbookSectionsContainer');
+        container.innerHTML = '';
+
+        const sections = data.sections || [];
+        if (sections.length === 0) {
+          container.innerHTML = `
+            <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300">
+              Reading chapter content for ${currentSoloChapter}... Use the "Open Chapter PDF" button above to view the complete official State Board book.
+            </div>
+          `;
+        } else {
+          sections.forEach(sec => {
+            const card = document.createElement('div');
+            card.className = 'p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2';
+            card.innerHTML = `
+              <h4 class="font-extrabold text-amber-300 text-sm flex items-center gap-2">
+                <i data-lucide="bookmark" class="w-4 h-4 text-amber-400"></i>
+                <span>${sec.heading}</span>
+              </h4>
+              <p class="text-xs text-slate-200 leading-relaxed font-normal whitespace-pre-line">${sec.text}</p>
+            `;
+            container.appendChild(card);
+          });
+        }
+      } catch (e) {
+        console.error("Error loading chapter PDF data", e);
+      }
+      lucide.createIcons();
+    }
+
+    // Pre-game Difficulty Choice
+    function selectSoloDifficulty(diff) {
+      currentActiveDifficulty = diff;
+      ['easy', 'medium', 'hard'].forEach(d => {
+        const btn = document.getElementById(`soloDiff_${d}`);
+        if (!btn) return;
+        if (d === diff) {
+          btn.className = 'p-3 rounded-xl border border-amber-400 bg-amber-500/20 text-center transition scale-105';
+        } else {
+          btn.className = 'p-3 rounded-xl border border-slate-700 bg-slate-800 text-center transition hover:bg-slate-700';
+        }
+      });
+      syncInGameDifficultyButtons(diff);
+    }
+
+    // In-Between Game Difficulty Switcher (Can change anytime!)
+    function changeInGameDifficulty(diff) {
+      currentActiveDifficulty = diff;
+      syncInGameDifficultyButtons(diff);
+
+      const multText = diff === 'easy' ? '+500 pts' : (diff === 'medium' ? '+1000 pts' : '+1500 pts');
+      showToast(`Difficulty changed to ${diff.toUpperCase()} (${multText})!`);
+
+      // Update question diff badge
+      const badge = document.getElementById('questionDiffIndicator');
+      if (badge) badge.textContent = diff.toUpperCase();
+    }
+
+    function syncInGameDifficultyButtons(diff) {
+      ['easy', 'medium', 'hard'].forEach(d => {
+        const btn = document.getElementById(`diffBtn_${d}`);
+        if (!btn) return;
+        if (d === diff) {
+          btn.className = 'px-2.5 py-1 rounded-lg font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 transition';
+        } else {
+          btn.className = 'px-2.5 py-1 rounded-lg font-bold text-slate-400 hover:text-white transition';
+        }
+      });
+    }
+
+    // Start practice battle with chosen topic
+    async function launchSoloPracticeGame() {
+      isSoloMode = true;
+      soloScore = 0;
+      soloRoundIndex = 0;
+      currentSoloChapter = document.getElementById('soloChapter').value;
+      currentSoloSubject = document.getElementById('soloSubject').value;
+      currentSoloGrade = document.getElementById('soloGrade').value;
+      currentSoloBoard = document.getElementById('soloBoard').value;
+      const currentSoloSubtopic = document.getElementById('soloSubtopic') ? document.getElementById('soloSubtopic').value : '';
+
+      try {
+        const url = `/api/solo-questions?board=${encodeURIComponent(currentSoloBoard)}&grade=${currentSoloGrade}&subject=${encodeURIComponent(currentSoloSubject)}&chapter=${encodeURIComponent(currentSoloChapter)}&game_type=${encodeURIComponent(currentSoloGameType)}&difficulty=all&limit=6`;
+        const res = await fetch(url);
+        const json = await res.json();
+        soloQuestions = json.questions;
+
+        if (!soloQuestions || soloQuestions.length === 0) {
+          showToast("Loading subject questions for selected mode...", "info");
+          const fallbackRes = await fetch(`/api/solo-questions?board=${encodeURIComponent(currentSoloBoard)}&grade=${currentSoloGrade}&subject=${encodeURIComponent(currentSoloSubject)}&game_type=${encodeURIComponent(currentSoloGameType)}&difficulty=all&limit=6`);
+          const fbJson = await fallbackRes.json();
+          soloQuestions = fbJson.questions;
+        }
+
+        showScreen('gameScreen');
+        syncInGameDifficultyButtons(currentActiveDifficulty);
+        loadSoloQuestion();
+      } catch (e) {
+        showToast("Error starting solo session", "error");
+      }
+    }
+
+    function loadSoloQuestion() {
+      if (soloRoundIndex >= soloQuestions.length) {
+        // Solo Game Over
+        const pName = document.getElementById('playerNameInput').value.trim() || 'Student';
+        showPodium({
+          leaderboard: [
+            { name: pName, avatar: selectedAvatar, score: soloScore }
+          ]
+        });
+        return;
+      }
+      const rawQ = soloQuestions[soloRoundIndex];
+      const subtopicVal = document.getElementById('soloSubtopic') ? document.getElementById('soloSubtopic').value : '';
+      const displayChapter = subtopicVal && !subtopicVal.toLowerCase().includes('all subtopics')
+        ? `${currentSoloChapter} • ${subtopicVal}`
+        : (currentSoloChapter || 'General');
+
+      renderQuestion({
+        type: rawQ.type,
+        question: rawQ.question,
+        options: rawQ.options || [],
+        pairs: rawQ.pairs || [],
+        difficulty: currentActiveDifficulty, // Reflects the current active difficulty!
+        round_num: soloRoundIndex + 1,
+        total_rounds: soloQuestions.length,
+        timer_seconds: currentActiveDifficulty === 'easy' ? 20 : (currentActiveDifficulty === 'medium' ? 15 : 10),
+        subject: currentSoloSubject,
+        chapter: displayChapter
+      });
+    }
+
+    function processSoloAnswer(ans) {
+      const q = soloQuestions[soloRoundIndex];
+      let isCorrect = false;
+
+      if (q.type === 'match') {
+        try {
+          const matched = JSON.parse(ans);
+          const pairs = q.pairs || [];
+          const correctCount = pairs.filter(p => matched[p.left] === p.right).length;
+          isCorrect = (correctCount === pairs.length) || (pairs.length > 2 && correctCount >= pairs.length - 1);
+        } catch (e) {
+          isCorrect = (ans.trim().toLowerCase() === q.answer.trim().toLowerCase()) || ans.includes('matched');
+        }
+      } else {
+        isCorrect = (ans.trim().toLowerCase() === q.answer.trim().toLowerCase());
+      }
+      
+      // Points scaled by active difficulty
+      const basePoints = currentActiveDifficulty === 'easy' ? 500 : (currentActiveDifficulty === 'medium' ? 1000 : 1500);
+      const pts = isCorrect ? basePoints : 0;
+      soloScore += pts;
+
+      showFeedback({
+        is_correct: isCorrect,
+        correct_answer: q.answer,
+        explanation: q.explanation || '',
+        points_earned: pts,
+        total_score: soloScore,
+        streak: 1
+      });
+
+      setTimeout(() => {
+        showRoundReveal({
+          correct_answer: q.answer,
+          explanation: q.explanation,
+          leaderboard: [
+            { name: document.getElementById('playerNameInput').value.trim() || 'Student', avatar: selectedAvatar, score: soloScore, streak: 1 }
+          ]
+        });
+      }, 1500);
+    }
+
+    function handleSoloTimeout() {
+      processSoloAnswer('');
+    }
+
+    function nextSoloRound() {
+      soloRoundIndex++;
+      loadSoloQuestion();
+    }
+
+    // TAMIL NADU TEXTBOOK PDF VIEWER LOGIC
+    let textbooksData = null;
+    let currentTextbookTab = '6';
+
+    async function openTextbooksModal() {
+      const modal = document.getElementById('textbooksModal');
+      modal.classList.remove('hidden');
+      if (!textbooksData) {
+        try {
+          const res = await fetch('/api/textbooks');
+          textbooksData = await res.json();
+        } catch (e) {
+          console.error("Failed to load textbooks", e);
+        }
+      }
+      switchTextbookTab(currentTextbookTab);
+      lucide.createIcons();
+    }
+
+    function closeTextbooksModal() {
+      document.getElementById('textbooksModal').classList.add('hidden');
+    }
+
+    function switchTextbookTab(grade) {
+      currentTextbookTab = grade;
+      ['6', '7', '8'].forEach(g => {
+        const btn = document.getElementById(`tabBtn${g}`);
+        if (g === grade) {
+          btn.className = 'px-5 py-2.5 font-bold text-xs uppercase tracking-wider border-b-2 border-amber-400 text-amber-300 transition';
+        } else {
+          btn.className = 'px-5 py-2.5 font-bold text-xs uppercase tracking-wider border-b-2 border-transparent text-slate-400 hover:text-white transition';
+        }
+      });
+
+      const list = document.getElementById('textbookSubjectsList');
+      list.innerHTML = '';
+
+      if (!textbooksData || !textbooksData.grades[grade]) return;
+      const gData = textbooksData.grades[grade];
+
+      gData.subjects.forEach(sub => {
+        const card = document.createElement('div');
+        card.className = 'glass-card p-4 rounded-2xl border border-slate-700/80 space-y-3 flex flex-col justify-between hover:border-amber-400/50 transition';
+        card.innerHTML = `
+          <div class="space-y-1">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-black text-amber-300 uppercase tracking-wider">${sub.name}</span>
+              <span class="text-[10px] bg-slate-800 text-slate-300 px-2 py-0.5 rounded font-bold">${gData.terms_note}</span>
+            </div>
+            <p class="text-xs text-slate-300 font-semibold pt-1">${sub.topics}</p>
+          </div>
+          <div class="flex items-center gap-2 pt-2">
+            <a href="${sub.url}" target="_blank" class="flex-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black py-2 px-3 rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition">
+              <i data-lucide="download" class="w-3.5 h-3.5"></i>
+              <span>Download PDF</span>
+            </a>
+            <button onclick="launchClassBattle('${grade}', '${sub.name}')" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-indigo-600 text-white font-bold text-xs transition" title="Practice this Subject">
+              ⚔️ Battle
+            </button>
+          </div>
+        `;
+        list.appendChild(card);
+      });
+      lucide.createIcons();
+    }
+
+    function launchClassBattle(grade, subject) {
+      closeTextbooksModal();
+      document.getElementById('userBoard').value = 'State Board';
+      document.getElementById('userGrade').value = grade;
+      showToast(`Selected TN State Board Class ${grade} - ${subject}!`);
+      openHostSettings();
+      document.getElementById('hostBoardSelect').value = 'State Board';
+      document.getElementById('hostGradeSelect').value = grade;
+      syncCurriculumDropdowns();
+      if (document.getElementById('hostSubjectSelect')) {
+        document.getElementById('hostSubjectSelect').value = subject;
+        syncChaptersDropdown();
+      }
+    }
+
+    // 10-PLAYER MEGA ARENA LAUNCHER
+    function startMegaArena() {
+      initSocket();
+      const pName = document.getElementById('playerNameInput').value.trim() || 'Student';
+      const grade = document.getElementById('userGrade').value;
+      const board = document.getElementById('userBoard').value;
+      showToast("Joining 10-Player Online Mega Arena...");
+      socket.emit('join_mega_arena', {
+        name: pName,
+        avatar: selectedAvatar,
+        board: board,
+        grade: grade,
+        subject: "Science"
+      });
+    }
+
+    // COMPETITIVE LEADERBOARD & RANK TIERS (Bronze 1-3 to Diamond 1-3)
+    function openLeaderboardModal() {
+      const modal = document.getElementById('leaderboardModal');
+      if (modal) modal.classList.remove('hidden');
+      fetchLeaderboardData();
+      lucide.createIcons();
+    }
+
+    function closeLeaderboardModal() {
+      const modal = document.getElementById('leaderboardModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    async function fetchLeaderboardData() {
+      const grade = document.getElementById('lbGradeSelect') ? document.getElementById('lbGradeSelect').value : '6';
+      const subject = document.getElementById('lbSubjectSelect') ? document.getElementById('lbSubjectSelect').value : 'Science';
+      const container = document.getElementById('leaderboardListContainer');
+      if (!container) return;
+      container.innerHTML = '<div class="text-center py-6 text-slate-400 text-xs">Loading Hall of Fame rankings...</div>';
+
+      try {
+        const res = await fetch(`/api/leaderboard?grade=${grade}&subject=${encodeURIComponent(subject)}`);
+        const data = await res.json();
+        container.innerHTML = '';
+
+        (data.leaderboard || []).forEach(item => {
+          const isTop3 = item.rank <= 3;
+          const rankBadgeColors = {
+            1: 'from-amber-400 to-yellow-600 text-slate-950 font-black',
+            2: 'from-slate-200 to-slate-400 text-slate-950 font-black',
+            3: 'from-amber-600 to-orange-700 text-white font-black'
+          };
+          const tier = item.rank_tier || { tier: 'Bronze', division: 1, badge: '🥉 Bronze 1', color: 'text-amber-600' };
+
+          const row = document.createElement('div');
+          row.className = `p-3 rounded-2xl border flex items-center justify-between transition ${item.name.includes('(You)') ? 'bg-indigo-950/60 border-indigo-500/50 shadow-md' : 'glass-card border-slate-800'}`;
+          row.innerHTML = `
+            <div class="flex items-center gap-3">
+              <div class="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black shadow ${isTop3 ? `bg-gradient-to-br ${rankBadgeColors[item.rank]}` : 'bg-slate-800 text-slate-400'}">
+                #${item.rank}
+              </div>
+              <span class="text-2xl">${item.avatar || '🎓'}</span>
+              <div>
+                <div class="font-extrabold text-sm text-white flex items-center gap-2">
+                  <span>${item.name}</span>
+                  ${item.name.includes('(You)') ? '<span class="text-[10px] bg-indigo-500 text-white font-bold px-1.5 py-0.5 rounded">YOU</span>' : ''}
+                </div>
+                <div class="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
+                  <span class="font-bold text-xs ${tier.color}">${tier.badge}</span>
+                  <span>•</span>
+                  <span>${item.wins} Wins</span>
+                </div>
+              </div>
+            </div>
+            <div class="text-right">
+              <div class="text-sm font-black text-amber-400">${item.score.toLocaleString()} XP</div>
+              <div class="text-[10px] text-slate-400">${item.subject}</div>
+            </div>
+          `;
+          container.appendChild(row);
+        });
+      } catch (err) {
+        console.error("Leaderboard fetch error:", err);
+        container.innerHTML = '<div class="text-center py-6 text-rose-400 text-xs">Failed to load leaderboard rankings.</div>';
+      }
+    }
+
+    // 3D INTERACTIVE THREE.JS BACKGROUND (FOLLOWS CURSOR PARALLAX)
+    let scene3D, camera3D, renderer3D, starParticles, meshGroup;
+    let targetMouseX = 0, targetMouseY = 0;
+    let currentMouseX = 0, currentMouseY = 0;
+    let pointLight1, pointLight2;
+
+    function init3DBackground() {
+      const canvas = document.getElementById('threeCanvas');
+      if (!canvas || typeof THREE === 'undefined') return;
+
+      scene3D = new THREE.Scene();
+      scene3D.fog = new THREE.FogExp2(0x090d16, 0.012);
+
+      camera3D = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera3D.position.z = 45;
+
+      renderer3D = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
+      renderer3D.setSize(window.innerWidth, window.innerHeight);
+      renderer3D.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+      // Dynamic Lights
+      const ambientLight = new THREE.AmbientLight(0x312e81, 1.2);
+      scene3D.add(ambientLight);
+
+      pointLight1 = new THREE.PointLight(0x6366f1, 2.5, 120);
+      pointLight1.position.set(20, 20, 25);
+      scene3D.add(pointLight1);
+
+      pointLight2 = new THREE.PointLight(0x38bdf8, 2.0, 120);
+      pointLight2.position.set(-20, -20, 25);
+      scene3D.add(pointLight2);
+
+      const goldLight = new THREE.PointLight(0xf59e0b, 1.8, 80);
+      goldLight.position.set(0, 0, 15);
+      scene3D.add(goldLight);
+
+      meshGroup = new THREE.Group();
+      scene3D.add(meshGroup);
+
+      // Floating 3D Geometric Academic Shapes
+      const materials = [
+        new THREE.MeshStandardMaterial({ color: 0x6366f1, wireframe: true, transparent: true, opacity: 0.65 }),
+        new THREE.MeshStandardMaterial({ color: 0x38bdf8, wireframe: true, transparent: true, opacity: 0.6 }),
+        new THREE.MeshStandardMaterial({ color: 0xa855f7, wireframe: true, transparent: true, opacity: 0.55 }),
+        new THREE.MeshStandardMaterial({ color: 0xf59e0b, wireframe: true, transparent: true, opacity: 0.5 })
+      ];
+
+      const geometries = [
+        new THREE.IcosahedronGeometry(4.5, 0),
+        new THREE.TorusGeometry(6, 0.35, 16, 60),
+        new THREE.OctahedronGeometry(4, 0),
+        new THREE.DodecahedronGeometry(4, 0),
+        new THREE.TorusKnotGeometry(3.5, 0.8, 64, 16),
+        new THREE.RingGeometry(5, 5.3, 32)
+      ];
+
+      const floatingMeshes = [];
+      const coords = [
+        { x: -30, y: 15, z: -10 },
+        { x: 32, y: 18, z: -15 },
+        { x: -34, y: -18, z: -8 },
+        { x: 30, y: -16, z: -12 },
+        { x: 0, y: 24, z: -18 },
+        { x: 0, y: -26, z: -14 }
+      ];
+
+      coords.forEach((c, i) => {
+        const geo = geometries[i % geometries.length];
+        const mat = materials[i % materials.length];
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(c.x, c.y, c.z);
+        mesh.userData = {
+          baseX: c.x,
+          baseY: c.y,
+          baseZ: c.z,
+          rotSpeedX: (Math.random() - 0.5) * 0.015,
+          rotSpeedY: (Math.random() - 0.5) * 0.015,
+          rotSpeedZ: (Math.random() - 0.5) * 0.01,
+          floatSpeed: 0.8 + Math.random() * 0.6,
+          depthFactor: 0.035 + (i * 0.005)
+        };
+        meshGroup.add(mesh);
+        floatingMeshes.push(mesh);
+      });
+
+      // 3D Star Constellation Particle Field
+      const particleCount = 1200;
+      const particleGeo = new THREE.BufferGeometry();
+      const particlePositions = new Float32Array(particleCount * 3);
+      const particleColors = new Float32Array(particleCount * 3);
+
+      for (let i = 0; i < particleCount; i++) {
+        const i3 = i * 3;
+        particlePositions[i3] = (Math.random() - 0.5) * 160;
+        particlePositions[i3 + 1] = (Math.random() - 0.5) * 160;
+        particlePositions[i3 + 2] = (Math.random() - 0.5) * 100 - 10;
+
+        // Mixed glowing stars: Indigo, Cyan, Amber, White
+        const rChoice = Math.random();
+        if (rChoice < 0.4) {
+          particleColors[i3] = 0.39; particleColors[i3 + 1] = 0.4; particleColors[i3 + 2] = 0.95; // Indigo
+        } else if (rChoice < 0.7) {
+          particleColors[i3] = 0.22; particleColors[i3 + 1] = 0.74; particleColors[i3 + 2] = 0.97; // Cyan
+        } else if (rChoice < 0.85) {
+          particleColors[i3] = 0.96; particleColors[i3 + 1] = 0.62; particleColors[i3 + 2] = 0.04; // Amber
+        } else {
+          particleColors[i3] = 0.9; particleColors[i3 + 1] = 0.95; particleColors[i3 + 2] = 1.0; // Starlight white
+        }
+      }
+
+      particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+      particleGeo.setAttribute('color', new THREE.BufferAttribute(particleColors, 3));
+
+      const particleMat = new THREE.PointsMaterial({
+        size: 0.9,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.85
+      });
+
+      starParticles = new THREE.Points(particleGeo, particleMat);
+      scene3D.add(starParticles);
+
+      // Track cursor coordinates across entire window
+      window.addEventListener('mousemove', (e) => {
+        targetMouseX = (e.clientX - window.innerWidth / 2);
+        targetMouseY = (e.clientY - window.innerHeight / 2);
+      });
+
+      // Mobile touch tracking
+      window.addEventListener('touchmove', (e) => {
+        if (e.touches && e.touches.length > 0) {
+          targetMouseX = (e.touches[0].clientX - window.innerWidth / 2);
+          targetMouseY = (e.touches[0].clientY - window.innerHeight / 2);
+        }
+      }, { passive: true });
+
+      window.addEventListener('resize', () => {
+        if (!camera3D || !renderer3D) return;
+        camera3D.aspect = window.innerWidth / window.innerHeight;
+        camera3D.updateProjectionMatrix();
+        renderer3D.setSize(window.innerWidth, window.innerHeight);
+      });
+
+      let clock = new THREE.Clock();
+
+      function animate() {
+        requestAnimationFrame(animate);
+        const elapsedTime = clock.getElapsedTime();
+
+        // Smooth cursor interpolation (damping)
+        currentMouseX += (targetMouseX - currentMouseX) * 0.045;
+        currentMouseY += (targetMouseY - currentMouseY) * 0.045;
+
+        // 3D Camera tilts and pans following cursor
+        camera3D.position.x = currentMouseX * 0.018;
+        camera3D.position.y = -currentMouseY * 0.018;
+        camera3D.rotation.z = -currentMouseX * 0.0003;
+        camera3D.lookAt(scene3D.position);
+
+        // Point light tracks cursor position
+        pointLight1.position.x = currentMouseX * 0.06;
+        pointLight1.position.y = -currentMouseY * 0.06;
+
+        // Rotate and float 3D shapes with cursor parallax
+        floatingMeshes.forEach(mesh => {
+          mesh.rotation.x += mesh.userData.rotSpeedX;
+          mesh.rotation.y += mesh.userData.rotSpeedY;
+          mesh.rotation.z += mesh.userData.rotSpeedZ;
+
+          const floatOffset = Math.sin(elapsedTime * mesh.userData.floatSpeed) * 1.5;
+          mesh.position.x = mesh.userData.baseX + (currentMouseX * mesh.userData.depthFactor);
+          mesh.position.y = mesh.userData.baseY + (-currentMouseY * mesh.userData.depthFactor) + floatOffset;
+        });
+
+        // Slow ambient rotation of starfield
+        starParticles.rotation.y = elapsedTime * 0.015 + (currentMouseX * 0.0001);
+        starParticles.rotation.x = elapsedTime * 0.008 + (-currentMouseY * 0.0001);
+
+        renderer3D.render(scene3D, camera3D);
+      }
+
+      animate();
+    }
+
+    // Init on load
+    window.addEventListener('DOMContentLoaded', () => {
+      init3DBackground();
+      renderAvatarPicker();
+      loadCurriculum();
+      if (window.lucide) lucide.createIcons();
+    });
+  </script>
+</body>
+</html>
